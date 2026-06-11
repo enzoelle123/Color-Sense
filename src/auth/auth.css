@@ -1,0 +1,115 @@
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --border: #2e3348;
+  --accent: #6c63ff;
+  --accent-hover: #8078ff;
+  --text: #e8eaf6;
+  --text-muted: #8b92b8;
+  --danger: #e05c7a;
+  --radius: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+#app {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.logo h1 { font-size: 22px; font-weight: 700; }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #e05c7a; }
+.dot-g { background: #4caf8a; }
+.dot-b { background: #6c63ff; }
+
+.tabs {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  gap: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: .15s;
+}
+
+.tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.form { display: none; flex-direction: column; gap: 12px; }
+.form.active { display: flex; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+
+input, select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+
+input:focus, select:focus { border-color: var(--accent); }
+
+select option { background: var(--surface); }
+
+.error {
+  font-size: 12px;
+  color: var(--danger);
+  min-height: 16px;
+}
+
+.btn-primary {
+  padding: 11px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }

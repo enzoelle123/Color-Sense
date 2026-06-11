@@ -1,8 +1,20 @@
+// Carrega .env manualmente — dotenv v17+ quebra o require do Electron
+const fs = require('fs');
+const envFile = require('path').join(__dirname, '.env');
+if (fs.existsSync(envFile)) {
+  fs.readFileSync(envFile, 'utf8').split('\n').forEach(line => {
+    const idx = line.indexOf('=');
+    if (idx > 0) process.env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  });
+}
+
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getPreferences, savePreferences } = require('./src/store/preferences');
 const { FILTER_TYPES } = require('./src/algorithms/colorFilters');
+const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
+const { getProfiles, createProfile, updateProfile, deleteProfile, addPatternRule, deletePatternRule } = require('./src/store/profileStore');
 
 let mainWindow = null;
 let tray = null;
@@ -12,6 +24,33 @@ let pendingCommand = null;
 let appQuitting = false;
 
 app.setAppUserModelId('com.colorsense.app');
+
+let authWindow = null;
+
+function createAuthWindow() {
+  authWindow = new BrowserWindow({
+    width: 420,
+    height: 520,
+    resizable: false,
+    title: 'ColorSense — Entrar',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  authWindow.loadFile(path.join(__dirname, 'src', 'auth', 'auth.html'));
+  authWindow.setMenuBarVisibility(false);
+
+  // Após login bem-sucedido, abre o painel principal
+  ipcMain.once('auth:success', () => {
+    authWindow.close();
+    authWindow = null;
+    createMainWindow();
+    applyCurrentFilter();
+  });
+}
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -219,13 +258,37 @@ ipcMain.handle('set-filter-type', (_, type) => {
   return getPreferences();
 });
 
+// ── IPC: Auth ────────────────────────────────────────────────────────────────
+
+ipcMain.handle('auth:sign-up',     (_, data)        => signUp(data));
+ipcMain.handle('auth:sign-in',     (_, data)        => signIn(data));
+ipcMain.handle('auth:sign-out',    ()               => signOut());
+ipcMain.handle('auth:get-session', ()               => getSession());
+ipcMain.handle('auth:get-user',    ()               => getUser());
+
+// ── IPC: Profiles ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('profiles:get-all',    ()              => getProfiles());
+ipcMain.handle('profiles:create',     (_, data)       => createProfile(data));
+ipcMain.handle('profiles:update',     (_, id, fields) => updateProfile(id, fields));
+ipcMain.handle('profiles:delete',     (_, id)         => deleteProfile(id));
+ipcMain.handle('profiles:add-rule',   (_, pid, data)  => addPatternRule(pid, data));
+ipcMain.handle('profiles:delete-rule',(_, id)         => deletePatternRule(id));
+
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
 
-app.whenReady().then(() => {
-  createMainWindow();
+app.whenReady().then(async () => {
+  const session = await getSession();
+
   createTray();
   startColorDaemon();
-  applyCurrentFilter();
+
+  if (session) {
+    createMainWindow();
+    applyCurrentFilter();
+  } else {
+    createAuthWindow();
+  }
 });
 
 app.on('before-quit', () => {

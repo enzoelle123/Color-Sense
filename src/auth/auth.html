@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>ColorSense</title>
+  <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+  <div id="app">
+
+    <div class="logo">
+      <span class="dot dot-r"></span>
+      <span class="dot dot-g"></span>
+      <span class="dot dot-b"></span>
+      <h1>ColorSense</h1>
+    </div>
+
+    <!-- Abas -->
+    <div class="tabs">
+      <button class="tab active" data-tab="login">Entrar</button>
+      <button class="tab" data-tab="register">Cadastrar</button>
+    </div>
+
+    <!-- Login -->
+    <form id="form-login" class="form active">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" required>
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="login-password" placeholder="••••••••" required>
+      </div>
+      <p class="error" id="login-error"></p>
+      <button type="submit" class="btn-primary" id="login-btn">Entrar</button>
+    </form>
+
+    <!-- Cadastro -->
+    <form id="form-register" class="form">
+      <div class="field">
+        <label>Nome</label>
+        <input type="text" id="reg-name" placeholder="Seu nome" required>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="seu@email.com" required>
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="reg-password" placeholder="mínimo 6 caracteres" required>
+      </div>
+      <div class="field">
+        <label>Tipo de daltonismo</label>
+        <select id="reg-daltonism">
+          <option value="normal">Normal (sem daltonismo)</option>
+          <option value="deuteranopia">Deuteranopia (verde)</option>
+          <option value="deuteranomalia">Deuteranomalia (verde leve)</option>
+          <option value="protanopia">Protanopia (vermelho)</option>
+          <option value="protanomalia">Protanomalia (vermelho leve)</option>
+          <option value="tritanopia">Tritanopia (azul)</option>
+          <option value="tritanomalia">Tritanomalia (azul leve)</option>
+          <option value="achromatopsia">Acromatopsia (sem cor)</option>
+        </select>
+      </div>
+      <p class="error" id="reg-error"></p>
+      <button type="submit" class="btn-primary" id="reg-btn">Criar conta</button>
+    </form>
+
+  </div>
+  <script src="auth.js"></script>
+</body>
+</html>

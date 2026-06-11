@@ -4,17 +4,19 @@
   "description": "Ferramenta de acessibilidade visual para pessoas com daltonismo",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "node run.js",
     "build": "electron-builder"
   },
   "author": "Guilherme Dias, Enzo Sprengoski, Murilo Jeronymo",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^31.0.0",
+    "electron": "^31.7.7",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "electron-store": "^8.2.0"
+    "@supabase/supabase-js": "^2.108.1",
+    "electron-store": "^8.2.0",
+    "ws": "^8.21.0"
   },
   "build": {
     "appId": "com.colorsense.app",
