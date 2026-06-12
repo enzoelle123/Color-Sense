@@ -6,6 +6,7 @@ const schema = {
   opacity: { type: 'number', default: 1.0, minimum: 0, maximum: 1 },
   userId: { type: ['string', 'null'], default: null },
   userName: { type: ['string', 'null'], default: null },
+  activeSceneId: { type: ['string', 'null'], default: null },
   theme: { type: 'string', default: 'dark' }
 };
 
@@ -18,6 +19,7 @@ function getPreferences() {
     opacity: store.get('opacity'),
     userId: store.get('userId'),
     userName: store.get('userName'),
+    activeSceneId: store.get('activeSceneId'),
     theme: store.get('theme')
   };
 }

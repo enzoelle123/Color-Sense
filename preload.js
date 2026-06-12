@@ -16,13 +16,15 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   getSession: ()      => ipcRenderer.invoke('auth:get-session'),
   getUser:    ()      => ipcRenderer.invoke('auth:get-user'),
 
-  // Perfis
-  getProfiles:      ()           => ipcRenderer.invoke('profiles:get-all'),
-  createProfile:    (data)       => ipcRenderer.invoke('profiles:create', data),
-  updateProfile:    (id, fields) => ipcRenderer.invoke('profiles:update', id, fields),
-  deleteProfile:    (id)         => ipcRenderer.invoke('profiles:delete', id),
-  addPatternRule:   (pid, data)  => ipcRenderer.invoke('profiles:add-rule', pid, data),
-  deletePatternRule:(id)         => ipcRenderer.invoke('profiles:delete-rule', id),
+  // Cenas
+  getScenes:        ()           => ipcRenderer.invoke('scenes:get-all'),
+  createScene:      (data)       => ipcRenderer.invoke('scenes:create', data),
+  updateScene:      (id, fields) => ipcRenderer.invoke('scenes:update', id, fields),
+  deleteScene:      (id)         => ipcRenderer.invoke('scenes:delete', id),
+  addPatternRule:   (sid, data)  => ipcRenderer.invoke('scenes:add-rule', sid, data),
+  updatePatternRule:(id, data)   => ipcRenderer.invoke('scenes:update-rule', id, data),
+  deletePatternRule:(id)         => ipcRenderer.invoke('scenes:delete-rule', id),
+  activateScene:    (id, filterType, rules) => ipcRenderer.invoke('scenes:activate', id, filterType, rules),
 
   // Renderer → main: login concluído
   notifyAuthSuccess: () => ipcRenderer.send('auth:success'),

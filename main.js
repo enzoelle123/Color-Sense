@@ -8,22 +8,34 @@ if (fs.existsSync(envFile)) {
   });
 }
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, desktopCapturer } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getPreferences, savePreferences } = require('./src/store/preferences');
 const { FILTER_TYPES } = require('./src/algorithms/colorFilters');
 const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
-const { getProfiles, createProfile, updateProfile, deleteProfile, addPatternRule, deletePatternRule } = require('./src/store/profileStore');
+const { getScenes, createScene, updateScene, deleteScene, addPatternRule, updatePatternRule, deletePatternRule } = require('./src/store/sceneStore');
 
-let mainWindow = null;
-let tray = null;
-let colorDaemon = null;
-let daemonReady = false;
+let mainWindow    = null;
+let tray          = null;
+let colorDaemon   = null;
+let daemonReady   = false;
 let pendingCommand = null;
-let appQuitting = false;
+let appQuitting   = false;
+let overlayWindow = null;
+let cachedRules   = [];
 
 app.setAppUserModelId('com.colorsense.app');
+
+// Instância única — se o app já está aberto, foca a janela existente
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+  });
+}
 
 let authWindow = null;
 
@@ -49,13 +61,14 @@ function createAuthWindow() {
     authWindow = null;
     createMainWindow();
     applyCurrentFilter();
+    refreshActiveRules();
   });
 }
 
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 420,
-    height: 580,
+    height: 640,
     resizable: false,
     show: false,
     title: 'ColorSense',
@@ -79,6 +92,79 @@ function createMainWindow() {
     }
   });
 }
+
+// ── Overlay Window ────────────────────────────────────────────────────────────
+
+function createOverlayWindow() {
+  const { width, height } = screen.getPrimaryDisplay().bounds;
+
+  overlayWindow = new BrowserWindow({
+    x: 0, y: 0, width, height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    show: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'src', 'ui', 'overlay-preload.js')
+    }
+  });
+
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.setContentProtection(true);
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  overlayWindow.loadFile(path.join(__dirname, 'src', 'ui', 'overlay.html'));
+
+  // Garante que o overlay receba as regras mesmo após reload/startup
+  overlayWindow.webContents.on('did-finish-load', () => syncOverlay());
+}
+
+// Recarrega do Supabase as regras da cena ativa e empurra para o overlay
+async function refreshActiveRules() {
+  const prefs = getPreferences();
+
+  if (!prefs.activeSceneId) {
+    cachedRules = [];
+  } else {
+    try {
+      const { supabase } = require('./src/store/supabase');
+      const { data } = await supabase
+        .from('pattern_rules')
+        .select('*')
+        .eq('scene_id', prefs.activeSceneId);
+      cachedRules = data || [];
+    } catch (err) {
+      console.error('[Overlay] erro ao carregar regras:', err.message);
+      cachedRules = [];
+    }
+  }
+
+  syncOverlay();
+}
+
+// Padrões visuais seguem o toggle universal: só aparecem com o filtro ativo
+function syncOverlay() {
+  if (!overlayWindow) return;
+  const prefs = getPreferences();
+  if (prefs.filterActive && cachedRules.length) {
+    overlayWindow.webContents.send('overlay-rules', cachedRules);
+  } else {
+    overlayWindow.webContents.send('overlay-clear');
+  }
+}
+
+// O overlay captura a tela via getUserMedia (stream contínuo, acelerado por GPU).
+// Aqui só fornecemos o id da fonte de captura.
+ipcMain.handle('overlay:get-source', async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 0, height: 0 }
+  });
+  return sources.length ? sources[0].id : null;
+});
 
 // ── Color Daemon (Windows Magnification API) ─────────────────────────────────
 
@@ -193,6 +279,7 @@ function buildTrayMenu() {
       click: (item) => {
         savePreferences({ filterActive: item.checked });
         applyCurrentFilter();
+        syncOverlay();
         tray.setContextMenu(buildTrayMenu());
         if (mainWindow) mainWindow.webContents.send('apply-filter', { type: prefs.filterType, active: item.checked });
       }
@@ -239,6 +326,7 @@ ipcMain.handle('get-preferences', () => getPreferences());
 ipcMain.handle('save-preferences', (_, prefs) => {
   savePreferences(prefs);
   applyCurrentFilter();
+  syncOverlay();
   tray.setContextMenu(buildTrayMenu());
   return getPreferences();
 });
@@ -246,6 +334,7 @@ ipcMain.handle('save-preferences', (_, prefs) => {
 ipcMain.handle('toggle-overlay', (_, enabled) => {
   savePreferences({ filterActive: enabled });
   applyCurrentFilter();
+  syncOverlay();
   tray.setContextMenu(buildTrayMenu());
   return getPreferences();
 });
@@ -262,18 +351,53 @@ ipcMain.handle('set-filter-type', (_, type) => {
 
 ipcMain.handle('auth:sign-up',     (_, data)        => signUp(data));
 ipcMain.handle('auth:sign-in',     (_, data)        => signIn(data));
-ipcMain.handle('auth:sign-out',    ()               => signOut());
+ipcMain.handle('auth:sign-out', async () => {
+  await signOut();
+  savePreferences({ activeSceneId: null, filterActive: false });
+  cachedRules = [];
+  syncOverlay();
+  applyCurrentFilter();
+  if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
+  createAuthWindow();
+});
 ipcMain.handle('auth:get-session', ()               => getSession());
 ipcMain.handle('auth:get-user',    ()               => getUser());
 
-// ── IPC: Profiles ─────────────────────────────────────────────────────────────
+// ── IPC: Cenas ────────────────────────────────────────────────────────────────
 
-ipcMain.handle('profiles:get-all',    ()              => getProfiles());
-ipcMain.handle('profiles:create',     (_, data)       => createProfile(data));
-ipcMain.handle('profiles:update',     (_, id, fields) => updateProfile(id, fields));
-ipcMain.handle('profiles:delete',     (_, id)         => deleteProfile(id));
-ipcMain.handle('profiles:add-rule',   (_, pid, data)  => addPatternRule(pid, data));
-ipcMain.handle('profiles:delete-rule',(_, id)         => deletePatternRule(id));
+ipcMain.handle('scenes:get-all', ()              => getScenes());
+ipcMain.handle('scenes:create',  (_, data)       => createScene(data));
+ipcMain.handle('scenes:update',  (_, id, fields) => updateScene(id, fields));
+ipcMain.handle('scenes:delete',  (_, id)         => deleteScene(id));
+
+ipcMain.handle('scenes:add-rule', async (_, sceneId, data) => {
+  const rule = await addPatternRule(sceneId, data);
+  // Se a regra pertence à cena ativa, aplica imediatamente
+  if (getPreferences().activeSceneId === sceneId) await refreshActiveRules();
+  return rule;
+});
+
+ipcMain.handle('scenes:update-rule', async (_, id, data) => {
+  const rule = await updatePatternRule(id, data);
+  await refreshActiveRules();
+  return rule;
+});
+
+ipcMain.handle('scenes:delete-rule', async (_, id) => {
+  await deletePatternRule(id);
+  await refreshActiveRules();
+});
+
+ipcMain.handle('scenes:activate', (_, sceneId, filterType, rules) => {
+  // Ativar uma cena liga o filtro automaticamente
+  savePreferences({ activeSceneId: sceneId, filterType, filterActive: true });
+  cachedRules = rules || [];
+  applyCurrentFilter();
+  syncOverlay();
+  tray.setContextMenu(buildTrayMenu());
+  if (mainWindow) mainWindow.webContents.send('apply-filter', { type: filterType, active: true });
+  return getPreferences();
+});
 
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -282,8 +406,10 @@ app.whenReady().then(async () => {
 
   createTray();
   startColorDaemon();
+  createOverlayWindow();
 
   if (session) {
+    await refreshActiveRules();
     createMainWindow();
     applyCurrentFilter();
   } else {

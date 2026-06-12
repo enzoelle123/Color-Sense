@@ -9,7 +9,6 @@
 <body>
   <div id="app">
 
-    <!-- Header -->
     <header>
       <div class="logo">
         <span class="logo-dot dot-r"></span>
@@ -17,42 +16,28 @@
         <span class="logo-dot dot-b"></span>
         <h1>ColorSense</h1>
       </div>
-      <span id="status-badge" class="badge badge-off">Desativado</span>
+      <div class="header-right">
+        <span id="user-name" class="user-name"></span>
+        <button id="btn-logout" class="btn-icon" title="Sair">⏻</button>
+      </div>
     </header>
 
-    <!-- Toggle principal -->
-    <section class="card toggle-card">
-      <div class="toggle-row">
-        <div>
-          <p class="label">Filtro de Acessibilidade</p>
-          <p class="sublabel" id="active-type-label">Nenhum filtro ativo</p>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="filter-toggle">
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-tab="filter">Filtro</button>
+      <button class="tab" data-tab="scenes">Cenas</button>
+    </div>
+
+    <div id="content" class="content"></div>
+
+    <footer>
+      <div class="footer-toggle">
+        <label class="switch switch-sm">
+          <input type="checkbox" id="global-toggle">
           <span class="slider"></span>
         </label>
+        <span id="status-badge" class="badge badge-off">Desativado</span>
       </div>
-    </section>
-
-    <!-- Seletor de tipo -->
-    <section class="card">
-      <p class="section-title">Tipo de Daltonismo</p>
-      <div class="filter-grid" id="filter-grid"></div>
-    </section>
-
-    <!-- Intensidade -->
-    <section class="card">
-      <p class="section-title">Intensidade do Filtro</p>
-      <div class="slider-row">
-        <input type="range" id="opacity-slider" min="0" max="100" value="100">
-        <span id="opacity-value">100%</span>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer>
-      <span>ColorSense v0.1</span>
-      <span>PUCPR · BES · 2025</span>
+      <span>ColorSense v0.1 · PUCPR</span>
     </footer>
 
   </div>
