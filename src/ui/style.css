@@ -439,6 +439,16 @@ footer {
 
 .footer-toggle { display: flex; align-items: center; gap: 8px; }
 
+/* Modo Criador */
+.creator-intro .sublabel { margin-top: 6px; line-height: 1.45; }
+.creator-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  padding: 0 4px;
+  margin-top: 2px;
+}
+
 .switch-sm { width: 38px; height: 21px; }
 .switch-sm .slider::before { height: 13px; width: 13px; }
 .switch-sm input:checked + .slider::before { transform: translate(17px, -50%); }

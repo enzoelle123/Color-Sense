@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   deletePatternRule:(id)         => ipcRenderer.invoke('scenes:delete-rule', id),
   activateScene:    (id, filterType, rules) => ipcRenderer.invoke('scenes:activate', id, filterType, rules),
 
+  // Criador (simulação de daltonismo)
+  getSimState:   ()        => ipcRenderer.invoke('sim:get-state'),
+  toggleSim:     (enabled) => ipcRenderer.invoke('sim:toggle', enabled),
+  setSimType:    (type)    => ipcRenderer.invoke('sim:set-type', type),
+
   // Renderer → main: login concluído
   notifyAuthSuccess: () => ipcRenderer.send('auth:success'),
 

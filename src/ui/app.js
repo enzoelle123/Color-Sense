@@ -26,9 +26,10 @@ const state = {
   prefs: {},
   scenes: [],
   user: null,
-  view: 'filter',       // 'filter' | 'scenes' | 'edit'
+  view: 'filter',       // 'filter' | 'scenes' | 'creator' | 'edit'
   editingScene: null,
-  editingRuleId: null   // id da regra em edição (null = formulário de nova regra)
+  editingRuleId: null,  // id da regra em edição (null = formulário de nova regra)
+  sim: { active: false, type: 'protanopia' }
 };
 
 // ── Refs fixos ────────────────────────────────────────────────────────────────
@@ -47,9 +48,10 @@ function render() {
     t.classList.toggle('active', t.dataset.tab === state.view)
   );
 
-  if (state.view === 'filter')      renderFilter();
-  else if (state.view === 'scenes') renderScenes();
-  else if (state.view === 'edit')   renderEdit();
+  if (state.view === 'filter')       renderFilter();
+  else if (state.view === 'scenes')  renderScenes();
+  else if (state.view === 'creator') renderCreator();
+  else if (state.view === 'edit')    renderEdit();
 
   updateGlobalControls();
 }
@@ -184,6 +186,67 @@ async function removeScene(scene) {
     state.prefs = await api.savePreferences({ activeSceneId: null });
   state.scenes = await api.getScenes();
   render();
+}
+
+// ── View: Criador (simulação para designers/devs) ─────────────────────────────
+
+function renderCreator() {
+  const simTypes = FILTERS.filter(f => f.key !== 'normal');
+  const active   = state.sim.active;
+  const curLabel = FILTERS.find(f => f.key === state.sim.type)?.label || '';
+
+  contentEl.innerHTML = `
+    <section class="card creator-intro">
+      <p class="label">Modo Criador</p>
+      <p class="sublabel">
+        Simule como pessoas com daltonismo enxergam sua tela.
+        Ative a simulação e abra seu design, site ou app para validar as cores.
+      </p>
+    </section>
+
+    <section class="card">
+      <div class="toggle-row">
+        <div>
+          <p class="label">Simulação de daltonismo</p>
+          <p class="sublabel" id="sim-status">
+            ${active ? `Simulando: ${curLabel}` : 'Desativada'}
+          </p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="sim-toggle" ${active ? 'checked' : ''}>
+          <span class="slider"></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <p class="section-title">Tipo de daltonismo a simular</p>
+      <div class="filter-grid" id="sim-grid"></div>
+    </section>
+
+    <p class="creator-hint">
+      A simulação afeta toda a tela e tem prioridade sobre o filtro de correção.
+      Os padrões visuais ficam ocultos enquanto ela está ativa.
+    </p>
+  `;
+
+  const grid = document.getElementById('sim-grid');
+  simTypes.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (f.key === state.sim.type ? ' active' : '');
+    btn.dataset.key = f.key;
+    btn.innerHTML = `<span class="btn-label">${f.label}</span><span class="btn-desc">${f.desc}</span>`;
+    btn.addEventListener('click', async () => {
+      state.sim = await api.setSimType(f.key);
+      renderCreator();
+    });
+    grid.appendChild(btn);
+  });
+
+  document.getElementById('sim-toggle').addEventListener('change', async (e) => {
+    state.sim = await api.toggleSim(e.target.checked);
+    renderCreator();
+  });
 }
 
 // ── View: Editar cena ─────────────────────────────────────────────────────────
@@ -460,15 +523,17 @@ api.onApplyFilter(({ type, active }) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
-  const [prefs, user, scenes] = await Promise.all([
+  const [prefs, user, scenes, sim] = await Promise.all([
     api.getPreferences(),
     api.getUser().catch(() => null),
-    api.getScenes().catch(() => [])
+    api.getScenes().catch(() => []),
+    api.getSimState().catch(() => ({ active: false, type: 'protanopia' }))
   ]);
 
   state.prefs  = prefs;
   state.user   = user;
   state.scenes = scenes;
+  state.sim    = sim;
 
   if (user?.name) userNameEl.textContent = user.name;
 

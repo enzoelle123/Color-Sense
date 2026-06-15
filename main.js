@@ -12,7 +12,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, desktopCap
 const path = require('path');
 const { spawn } = require('child_process');
 const { getPreferences, savePreferences } = require('./src/store/preferences');
-const { FILTER_TYPES } = require('./src/algorithms/colorFilters');
+const { SIMULATION_MATRICES, CORRECTION_MATRICES } = require('./src/algorithms/colorFilters');
 const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
 const { getScenes, createScene, updateScene, deleteScene, addPatternRule, updatePatternRule, deletePatternRule } = require('./src/store/sceneStore');
 
@@ -24,6 +24,11 @@ let pendingCommand = null;
 let appQuitting   = false;
 let overlayWindow = null;
 let cachedRules   = [];
+
+// Modo Criador — simulação de daltonismo para designers/devs.
+// Em memória (ferramenta transitória, não persiste entre sessões).
+let simulationActive = false;
+let simulationType   = 'protanopia';
 
 app.setAppUserModelId('com.colorsense.app');
 
@@ -145,11 +150,12 @@ async function refreshActiveRules() {
   syncOverlay();
 }
 
-// Padrões visuais seguem o toggle universal: só aparecem com o filtro ativo
+// Padrões visuais seguem o toggle universal: só aparecem com o filtro ativo.
+// Durante a simulação (modo Criador) ficam ocultos para não poluir a tela.
 function syncOverlay() {
   if (!overlayWindow) return;
   const prefs = getPreferences();
-  if (prefs.filterActive && cachedRules.length) {
+  if (!simulationActive && prefs.filterActive && cachedRules.length) {
     overlayWindow.webContents.send('overlay-rules', cachedRules);
   } else {
     overlayWindow.webContents.send('overlay-clear');
@@ -246,12 +252,20 @@ function stopColorDaemon() {
 // ── Filter Logic ─────────────────────────────────────────────────────────────
 
 function applyCurrentFilter() {
+  // A simulação (modo Criador) tem prioridade sobre o filtro de correção:
+  // o designer quer ver a tela exatamente como um daltônico veria.
+  if (simulationActive) {
+    const sim = SIMULATION_MATRICES[simulationType];
+    sendToDaemon(sim ? { action: 'apply', matrix: sim.matrix } : { action: 'clear' });
+    return;
+  }
+
   const prefs = getPreferences();
 
   if (!prefs.filterActive || prefs.filterType === 'normal') {
     sendToDaemon({ action: 'clear' });
   } else {
-    const filter = FILTER_TYPES[prefs.filterType];
+    const filter = CORRECTION_MATRICES[prefs.filterType];
     if (filter) {
       sendToDaemon({ action: 'apply', matrix: filter.matrix });
     }
@@ -347,6 +361,24 @@ ipcMain.handle('set-filter-type', (_, type) => {
   return getPreferences();
 });
 
+// ── IPC: Criador (simulação de daltonismo) ────────────────────────────────────
+
+ipcMain.handle('sim:get-state', () => ({ active: simulationActive, type: simulationType }));
+
+ipcMain.handle('sim:toggle', (_, enabled) => {
+  simulationActive = enabled;
+  applyCurrentFilter();
+  syncOverlay();
+  tray.setContextMenu(buildTrayMenu());
+  return { active: simulationActive, type: simulationType };
+});
+
+ipcMain.handle('sim:set-type', (_, type) => {
+  simulationType = type;
+  if (simulationActive) applyCurrentFilter();
+  return { active: simulationActive, type: simulationType };
+});
+
 // ── IPC: Auth ────────────────────────────────────────────────────────────────
 
 ipcMain.handle('auth:sign-up',     (_, data)        => signUp(data));
@@ -355,6 +387,7 @@ ipcMain.handle('auth:sign-out', async () => {
   await signOut();
   savePreferences({ activeSceneId: null, filterActive: false });
   cachedRules = [];
+  simulationActive = false;
   syncOverlay();
   applyCurrentFilter();
   if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
