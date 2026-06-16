@@ -119,7 +119,8 @@ function createOverlayWindow() {
   });
 
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-  overlayWindow.setContentProtection(true);
+  // Proteção de captura desligada: o filtro aparece em prints e compartilhamento de tela.
+  overlayWindow.setContentProtection(false);
   overlayWindow.setAlwaysOnTop(true, 'screen-saver');
   overlayWindow.loadFile(path.join(__dirname, 'src', 'ui', 'overlay.html'));
 
