@@ -8,7 +8,8 @@ const FILTERS = [
   { key: 'deuteranomalia', label: 'Deuteranomalia', desc: 'Leve — verde' },
   { key: 'tritanopia',     label: 'Tritanopia',     desc: 'Deficiência em azul' },
   { key: 'tritanomalia',   label: 'Tritanomalia',   desc: 'Leve — azul' },
-  { key: 'achromatopsia',  label: 'Acromatopsia',   desc: 'Sem percepção de cor' }
+  { key: 'achromatopsia',  label: 'Acromatopsia',   desc: 'Sem percepção de cor' },
+  { key: 'achromatomaly',  label: 'Acromatomalia',  desc: 'Percepção de cor reduzida' }
 ];
 
 const PATTERNS = [
@@ -25,6 +26,7 @@ const PATTERNS = [
 const state = {
   prefs: {},
   scenes: [],
+  filterInfo: {},       // { tipo: { temCorrecao } } — vem do processo principal
   user: null,
   view: 'filter',       // 'filter' | 'scenes' | 'creator' | 'edit'
   editingScene: null,
@@ -58,7 +60,19 @@ function render() {
 
 function updateGlobalControls() {
   const on = state.prefs.filterActive;
-  globalToggle.checked    = on || false;
+  globalToggle.checked = on || false;
+
+  // A simulação do Criador tem prioridade sobre o filtro e afeta a tela toda.
+  // Se ela está ligada, o rodapé precisa dizer isso mesmo quando o usuário já
+  // saiu daquela aba — senão o badge afirma "Ativo"/"Desativado" enquanto a
+  // tela está, na verdade, simulando daltonismo.
+  if (state.sim?.active) {
+    const tipo = FILTERS.find(f => f.key === state.sim.type)?.label || '';
+    statusBadge.textContent = 'Simulando' + (tipo ? ' · ' + tipo : '');
+    statusBadge.className   = 'badge badge-sim';
+    return;
+  }
+
   statusBadge.textContent = on ? 'Ativo' : 'Desativado';
   statusBadge.className   = 'badge ' + (on ? 'badge-on' : 'badge-off');
 }
@@ -75,7 +89,7 @@ function renderFilter() {
     <div class="card profile-banner">
       <div class="profile-banner-row">
         <div>
-          <p class="label">${activeScene.name}</p>
+          <p class="label">${esc(activeScene.name)}</p>
           <p class="sublabel">Cena ativa · ${filterLabel}</p>
         </div>
         <button class="btn-sm" id="btn-switch">Trocar cena</button>
@@ -98,11 +112,22 @@ function renderFilter() {
 
   const grid = document.getElementById('filter-grid');
   FILTERS.forEach(f => {
+    // Acromatopsia não tem correção possível por matriz linear: não sobra
+    // canal funcional para onde realocar a cor perdida. Dizer isso é melhor
+    // que oferecer um botão que não faz nada.
+    const semCorrecao = f.key !== 'normal' && state.filterInfo[f.key]?.temCorrecao === false;
+
     const btn = document.createElement('button');
-    btn.className = 'filter-btn' + (f.key === state.prefs.filterType ? ' active' : '');
+    btn.className = 'filter-btn'
+      + (f.key === state.prefs.filterType ? ' active' : '')
+      + (semCorrecao ? ' filter-btn-indisponivel' : '');
     btn.dataset.key = f.key;
-    btn.innerHTML = `<span class="btn-label">${f.label}</span><span class="btn-desc">${f.desc}</span>`;
+    btn.disabled = semCorrecao;
+    if (semCorrecao) btn.title = 'Sem correção possível por filtro de cor';
+    btn.innerHTML = `<span class="btn-label">${esc(f.label)}</span>`
+      + `<span class="btn-desc">${semCorrecao ? 'Sem correção disponível' : esc(f.desc)}</span>`;
     btn.addEventListener('click', async () => {
+      if (semCorrecao) return;
       state.prefs = await api.setFilterType(f.key);
       render();
     });
@@ -157,9 +182,9 @@ function sceneCardHTML(s, activeId) {
     <div class="card profile-card ${isActive ? 'profile-active' : ''}">
       <div class="profile-card-top">
         <div class="profile-card-info">
-          <p class="profile-name">${s.name}</p>
+          <p class="profile-name">${esc(s.name)}</p>
           <div class="profile-meta">
-            <span class="chip">${filterLabel}</span>
+            <span class="chip">${esc(filterLabel)}</span>
             ${rulesCount > 0 ? `<span class="chip chip-rules">${rulesCount} regra${rulesCount > 1 ? 's' : ''}</span>` : ''}
             ${isActive ? '<span class="chip chip-active">Ativa</span>' : ''}
           </div>
@@ -239,6 +264,7 @@ function renderCreator() {
     btn.addEventListener('click', async () => {
       state.sim = await api.setSimType(f.key);
       renderCreator();
+      updateGlobalControls();
     });
     grid.appendChild(btn);
   });
@@ -246,6 +272,7 @@ function renderCreator() {
   document.getElementById('sim-toggle').addEventListener('change', async (e) => {
     state.sim = await api.toggleSim(e.target.checked);
     renderCreator();
+    updateGlobalControls();
   });
 }
 
@@ -274,7 +301,7 @@ function renderEdit() {
         <label>Nome da cena</label>
         <input type="text" id="s-name" class="input"
           placeholder="Ex: Trabalho, Dev - VSCode, Casual..."
-          value="${s?.name ?? ''}">
+          value="${esc(s?.name ?? '')}">
       </div>
       <div class="field" style="margin-top:10px">
         <label>Filtro base de daltonismo</label>
@@ -329,10 +356,10 @@ function ruleItemHTML(r) {
   const patLabel = PATTERNS.find(pt => pt.key === r.pattern)?.label ?? r.pattern;
   return `
     <div class="rule-item">
-      <span class="rule-swatch" style="background:${r.color_hex}"></span>
+      <span class="rule-swatch" style="background:${/^#[0-9a-f]{6}$/i.test(r.color_hex) ? r.color_hex : '#888888'}"></span>
       <div class="rule-info">
-        <span class="rule-label">${r.label || r.color_hex}</span>
-        <span class="rule-sub">${patLabel} · tolerância ±${r.hue_tolerance}° · ${Math.round(r.opacity * 100)}% opacidade</span>
+        <span class="rule-label">${esc(r.label || r.color_hex)}</span>
+        <span class="rule-sub">${esc(patLabel)} · tolerância ±${Number(r.hue_tolerance)}° · ${Math.round(r.opacity * 100)}% opacidade</span>
       </div>
       <button class="btn-icon" id="edit-rule-${r.id}" title="Editar">✎</button>
       <button class="btn-icon btn-danger" id="del-rule-${r.id}" title="Remover">×</button>
@@ -381,7 +408,7 @@ function ruleFormHTML(r) {
         <label>Rótulo (opcional)</label>
         <input type="text" id="r-label" class="input"
           placeholder="Ex: Vermelho de alerta, Botões de erro..."
-          value="${r?.label && r.label !== r?.color_hex ? r.label : ''}">
+          value="${esc(r?.label && r.label !== r?.color_hex ? r.label : '')}">
       </div>
       <div class="field">
         <label>Tolerância de matiz: <span id="r-tol-val">±${tol}°</span></label>
@@ -481,6 +508,15 @@ async function deleteRule(ruleId) {
 
 // ── Utilitários ───────────────────────────────────────────────────────────────
 
+// Nomes de cena e rótulos de regra são digitados pelo usuário e entram em
+// innerHTML. Sem escapar, uma cena chamada <img src=x onerror=...> quebra o
+// painel.
+function esc(texto) {
+  return String(texto ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
 function hexToHue(hex) {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -513,6 +549,14 @@ globalToggle.addEventListener('change', async () => {
 
 document.getElementById('btn-logout').addEventListener('click', () => api.signOut());
 
+// O toggle universal desliga a simulação no processo principal; a aba Criador
+// precisa saber disso para não exibir um estado que já não é verdade.
+api.onSimChange?.((sim) => {
+  state.sim = sim;
+  updateGlobalControls();
+  if (state.view === 'creator') renderCreator();
+});
+
 api.onApplyFilter(({ type, active }) => {
   state.prefs.filterType   = type;
   state.prefs.filterActive = active;
@@ -523,19 +567,21 @@ api.onApplyFilter(({ type, active }) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
-  const [prefs, user, scenes, sim] = await Promise.all([
+  const [prefs, user, scenes, sim, filterInfo] = await Promise.all([
     api.getPreferences(),
     api.getUser().catch(() => null),
     api.getScenes().catch(() => []),
-    api.getSimState().catch(() => ({ active: false, type: 'protanopia' }))
+    api.getSimState().catch(() => ({ active: false, type: 'protanopia' })),
+    api.getFilterInfo().catch(() => ({}))
   ]);
 
-  state.prefs  = prefs;
-  state.user   = user;
-  state.scenes = scenes;
-  state.sim    = sim;
+  state.prefs      = prefs;
+  state.user       = user;
+  state.scenes     = scenes;
+  state.sim        = sim;
+  state.filterInfo = filterInfo;
 
-  if (user?.name) userNameEl.textContent = user.name;
+  if (user?.name) userNameEl.textContent = user.name;  // textContent já escapa
 
   render();
 }

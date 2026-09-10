@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   savePreferences: (prefs)  => ipcRenderer.invoke('save-preferences', prefs),
   toggleOverlay:   (enabled)=> ipcRenderer.invoke('toggle-overlay', enabled),
   setFilterType:   (type)   => ipcRenderer.invoke('set-filter-type', type),
+  getFilterInfo:   ()       => ipcRenderer.invoke('filters:get-info'),
   onApplyFilter:   (cb)     => ipcRenderer.on('apply-filter', (_, data) => cb(data)),
   removeApplyFilter: ()     => ipcRenderer.removeAllListeners('apply-filter'),
 
@@ -30,10 +31,11 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   getSimState:   ()        => ipcRenderer.invoke('sim:get-state'),
   toggleSim:     (enabled) => ipcRenderer.invoke('sim:toggle', enabled),
   setSimType:    (type)    => ipcRenderer.invoke('sim:set-type', type),
+  // O processo principal avisa quando desliga a simulação por conta do
+  // toggle universal, para a aba Criador não ficar mostrando estado velho.
+  onSimChange:   (cb)      => ipcRenderer.on('sim:changed', (_, data) => cb(data)),
 
   // Renderer → main: login concluído
   notifyAuthSuccess: () => ipcRenderer.send('auth:success'),
 
-  // Main → renderer
-  onAuthChange: (cb) => ipcRenderer.on('auth:changed', (_, data) => cb(data))
 });
