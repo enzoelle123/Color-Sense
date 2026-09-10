@@ -1,6 +1,6 @@
 {
   "name": "colorsense",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Ferramenta de acessibilidade visual para pessoas com daltonismo",
   "main": "main.js",
   "scripts": {
@@ -22,16 +22,27 @@
     "appId": "com.colorsense.app",
     "productName": "ColorSense",
     "win": {
-      "target": "nsis",
+      "target": [
+        "portable",
+        "nsis"
+      ],
       "icon": "assets/icons/icon.ico"
     },
     "mac": {
       "target": "dmg",
-      "icon": "assets/icons/icon.icns"
+      "icon": "assets/icons/icon.png"
     },
     "linux": {
       "target": "AppImage",
       "icon": "assets/icons/icon.png"
-    }
+    },
+    "asarUnpack": [
+      "src/native/**"
+    ],
+    "files": [
+      "**/*",
+      "!dist",
+      "!docs"
+    ]
   }
 }

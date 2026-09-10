@@ -60,7 +60,7 @@ O ColorSense é construído com **Electron**, que combina o **Chromium** (interf
 - **Filtro de cor** → o JavaScript *calcula* a matriz de transformação ([src/algorithms/colorFilters.js](src/algorithms/colorFilters.js)); o daemon PowerShell a *aplica* na tela inteira via Windows Magnification API (GPU).
 - **Padrões visuais** → o app captura a tela como vídeo, analisa o matiz de cada pixel e desenha texturas sobre a cor-alvo usando um `<canvas>` numa janela transparente sobreposta ([src/ui/overlay.js](src/ui/overlay.js)).
 
-📚 **Documentação técnica completa:** [docs/ColorSense-Documentacao-Tecnica.md](docs/ColorSense-Documentacao-Tecnica.md)
+📚 **Esquema do banco:** [supabase/schema.sql](supabase/schema.sql) — tabelas, políticas de RLS e restrições, comentados.
 
 ---
 
@@ -139,7 +139,11 @@ SUPABASE_URL=sua_url_aqui
 SUPABASE_KEY=sua_chave_aqui
 ```
 
-> 🔑 **Credenciais de avaliação:** as credenciais reais do `.env` (URL e chave do Supabase) serão fornecidas **no comentário da entrega da ferramenta no Canvas**, junto com o trabalho. Basta copiá-las para o arquivo `.env` para que o login e as cenas funcionem.
+> 🔑 **Credenciais de avaliação:** a URL e a chave do Supabase são fornecidas **no comentário da entrega no Canvas**. Copie-as para o `.env` e o login passa a funcionar.
+>
+> A chave usada é a **publishable** (`sb_publishable_...`), que é pública por natureza — ela vai embutida no executável e é o RLS que protege os dados. A chave secreta (`sb_secret_...`) **nunca** deve ir para o `.env`: ela ignora o RLS inteiro e daria a qualquer usuário acesso aos dados de todos os outros.
+>
+> Projetos Supabase no plano gratuito são **pausados por inatividade**, e um projeto pausado deixa o app travado na tela de login. Se isso acontecer, restaure o projeto pelo painel antes de avaliar.
 
 **4. Inicie a aplicação**
 ```bash
@@ -152,8 +156,10 @@ O app abrirá com a tela de login. Após autenticar, o painel principal aparece 
 ## ⚠️ Limitações
 
 - **Apenas Windows.** O filtro de tela inteira usa a Windows Magnification API, que não existe em macOS/Linux. Embora o `package.json` tenha alvos de build para os três sistemas, **só o Windows é funcional**.
-- **Correção por matriz linear.** Recupera a distinção de cores redistribuindo informação, mas não "cria" o que foi perdido. Casos de acromatopsia (ausência total de cor) não têm correção por esse método.
+- **Correção por matriz linear.** Recupera a distinção de cores redistribuindo informação, mas não "cria" o que foi perdido. Acromatopsia e acromatomalia não têm correção possível por esse método — não sobra canal funcional para onde realocar a informação. Nesses dois casos a interface marca o filtro como indisponível em vez de aplicar uma matriz que não faz nada; a simulação deles continua funcionando na aba Criador.
+- **Distorção como contrapartida.** Afastar cores que a pessoa confunde significa deslocar cores que ela já enxergava bem. O slider *Intensidade do Filtro* existe para achar o equilíbrio — não há um valor certo universal.
 - **Verificador de contraste** ([contrastChecker.js](src/algorithms/contrastChecker.js)) está implementado mas ainda não integrado à interface — base para um recurso futuro.
+- **Relógio do sistema.** O token de sessão do Supabase é rejeitado se o relógio do computador estiver adiantado em relação ao servidor (`JWT issued at future`). Se as cenas não carregarem, verifique a sincronização de data e hora do Windows.
 
 ---
 
