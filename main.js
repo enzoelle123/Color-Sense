@@ -37,9 +37,34 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
-  });
+  app.on('second-instance', () => { mostrarJanela(); });
+}
+
+// Traz o usuário de volta para alguma janela, sempre.
+//
+// Antes isto era `if (mainWindow) mainWindow.show()`. Bastava fechar a tela de
+// login — ou fazer logout e fechar — para mainWindow ficar null e NADA mais
+// abrir: nem clicar na bandeja, nem abrir o programa de novo. O app seguia
+// rodando, invisível e inalcançável, e só o Gerenciador de Tarefas resolvia.
+async function mostrarJanela() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show(); mainWindow.focus(); return;
+  }
+  if (authWindow && !authWindow.isDestroyed()) {
+    authWindow.show(); authWindow.focus(); return;
+  }
+
+  // Nenhuma janela viva: a sessão decide qual abrir.
+  let sessao = null;
+  try { sessao = await getSession(); } catch (_) {}
+
+  if (sessao) {
+    createMainWindow();
+    applyCurrentFilter();
+    refreshActiveRules();
+  } else {
+    createAuthWindow();
+  }
 }
 
 let authWindow = null;
@@ -60,9 +85,15 @@ function createAuthWindow() {
   authWindow.loadFile(path.join(__dirname, 'src', 'auth', 'auth.html'));
   authWindow.setMenuBarVisibility(false);
 
+  authWindow.on('closed', () => { authWindow = null; });
+
+  // removeAllListeners antes do once: createAuthWindow pode ser chamada de
+  // novo (logout, ou reabrir depois de fechar) e os listeners empilhariam.
+  ipcMain.removeAllListeners('auth:success');
+
   // Após login bem-sucedido, abre o painel principal
   ipcMain.once('auth:success', () => {
-    authWindow.close();
+    if (authWindow && !authWindow.isDestroyed()) authWindow.close();
     authWindow = null;
     createMainWindow();
     applyCurrentFilter();
@@ -234,11 +265,15 @@ function startColorDaemon() {
     return;
   }
 
+  // O -ParentPid liga o vigia do daemon: ele acompanha este processo e se
+  // encerra junto. Sem isso, um encerramento anormal poderia deixar o filtro
+  // preso na tela inteira, sem nenhuma janela para desligá-lo.
   colorDaemon = spawn('powershell.exe', [
     '-ExecutionPolicy', 'Bypass',
     '-NonInteractive',
     '-WindowStyle', 'Hidden',
-    '-File', scriptPath
+    '-File', scriptPath,
+    '-ParentPid', String(process.pid)
   ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 
   let buf = '';
@@ -296,12 +331,18 @@ function sendToDaemon(command) {
 
 function stopColorDaemon() {
   if (!colorDaemon) return;
+  const d = colorDaemon;
   try {
+    // 'clear' antes de 'exit': devolve a tela ao normal enquanto o daemon ainda
+    // responde. O setTimeout que existia aqui não chegava a disparar, porque
+    // isto roda no before-quit e o processo termina antes de 1 segundo.
+    _sendToDaemon({ action: 'clear' });
     _sendToDaemon({ action: 'exit' });
-    setTimeout(() => { if (colorDaemon) colorDaemon.kill(); }, 1000);
-  } catch (_) {
-    colorDaemon.kill();
-  }
+  } catch (_) {}
+  // Rede de segurança: se o daemon travou e não leu o 'exit', ainda assim cai.
+  try { d.kill(); } catch (_) {}
+  colorDaemon = null;
+  daemonReady = false;
 }
 
 // ── Filter Logic ─────────────────────────────────────────────────────────────
@@ -379,14 +420,10 @@ function buildTrayMenu() {
   return Menu.buildFromTemplate([
     { label: 'ColorSense', enabled: false },
     { type: 'separator' },
-    // mainWindow é null enquanto o usuário não fez login: createTray() roda no
-    // boot, antes da autenticação. Sem a checagem, clicar aqui só lança um
-    // TypeError silencioso no processo principal e o item parece morto.
-    {
-      label: 'Abrir Painel',
-      enabled: !!mainWindow,
-      click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } }
-    },
+    // Sempre habilitado: mostrarJanela() decide o que abrir conforme a sessão,
+    // e recria a janela se não houver nenhuma viva. Desabilitar este item
+    // deixava o usuário sem nenhuma saída depois de fechar a tela de login.
+    { label: 'Abrir Painel', click: () => { mostrarJanela(); } },
     {
       label: 'Filtro Ativo',
       type: 'checkbox',
@@ -428,7 +465,7 @@ function createTray() {
   tray = new Tray(icon);
   tray.setToolTip('ColorSense');
   tray.setContextMenu(buildTrayMenu());
-  tray.on('click', () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } });
+  tray.on('click', () => { mostrarJanela(); });
 }
 
 // ── IPC Handlers ─────────────────────────────────────────────────────────────

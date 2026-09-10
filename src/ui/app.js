@@ -200,17 +200,21 @@ function sceneCardHTML(s, activeId) {
 }
 
 async function activateScene(scene) {
-  state.prefs = await api.activateScene(scene.id, scene.filter_type, scene.pattern_rules || []);
-  render();
+  const r = await tentar('activateScene', async () => {
+    state.prefs = await api.activateScene(scene.id, scene.filter_type, scene.pattern_rules || []);
+  });
+  if (r.ok) render();
 }
 
 async function removeScene(scene) {
   if (!confirm(`Excluir a cena "${scene.name}"?`)) return;
-  await api.deleteScene(scene.id);
-  if (state.prefs.activeSceneId === scene.id)
-    state.prefs = await api.savePreferences({ activeSceneId: null });
-  state.scenes = await api.getScenes();
-  render();
+  const r = await tentar('removeScene', async () => {
+    await api.deleteScene(scene.id);
+    if (state.prefs.activeSceneId === scene.id)
+      state.prefs = await api.savePreferences({ activeSceneId: null });
+    state.scenes = await api.getScenes();
+  });
+  if (r.ok) render();
 }
 
 // ── View: Criador (simulação para designers/devs) ─────────────────────────────
@@ -455,23 +459,32 @@ function bindRuleFormEvents() {
 }
 
 async function saveScene() {
+  const botao      = document.getElementById('btn-save');
   const name       = document.getElementById('s-name').value.trim();
   const filterType = document.getElementById('s-filter').value;
   if (!name) { alert('Dê um nome à cena.'); return; }
 
-  if (!state.editingScene) {
-    const created = await api.createScene({ name, filterType });
-    state.scenes = await api.getScenes();
-    state.editingScene = state.scenes.find(s => s.id === created.id);
-    render();
-  } else {
-    await api.updateScene(state.editingScene.id, { name, filter_type: filterType });
-    if (state.prefs.activeSceneId === state.editingScene.id)
-      state.prefs = await api.setFilterType(filterType);
-    state.scenes = await api.getScenes();
-    state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
-    render();
-  }
+  const rotuloOriginal = botao.textContent;
+  botao.disabled = true;
+  botao.textContent = 'Salvando...';
+
+  const r = await tentar('saveScene', async () => {
+    if (!state.editingScene) {
+      const created = await api.createScene({ name, filterType });
+      state.scenes = await api.getScenes();
+      state.editingScene = state.scenes.find(s => s.id === created.id);
+    } else {
+      await api.updateScene(state.editingScene.id, { name, filter_type: filterType });
+      if (state.prefs.activeSceneId === state.editingScene.id)
+        state.prefs = await api.setFilterType(filterType);
+      state.scenes = await api.getScenes();
+      state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
+    }
+  });
+
+  botao.disabled = false;
+  botao.textContent = rotuloOriginal;
+  if (r.ok) render();
 }
 
 async function submitRule() {
@@ -487,23 +500,59 @@ async function submitRule() {
     opacity:      parseFloat(document.getElementById('r-opacity').value)
   };
 
-  if (state.editingRuleId) {
-    await api.updatePatternRule(state.editingRuleId, payload);
-  } else {
-    await api.addPatternRule(state.editingScene.id, payload);
-  }
+  const r = await tentar('submitRule', async () => {
+    if (state.editingRuleId) {
+      await api.updatePatternRule(state.editingRuleId, payload);
+    } else {
+      await api.addPatternRule(state.editingScene.id, payload);
+    }
+    state.scenes = await api.getScenes();
+    state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
+  });
+  if (!r.ok) return;
 
   state.editingRuleId = null;
-  state.scenes = await api.getScenes();
-  state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
   render();
 }
 
 async function deleteRule(ruleId) {
-  await api.deletePatternRule(ruleId);
-  state.scenes = await api.getScenes();
-  state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
-  render();
+  const r = await tentar('deleteRule', async () => {
+    await api.deletePatternRule(ruleId);
+    state.scenes = await api.getScenes();
+    state.editingScene = state.scenes.find(s => s.id === state.editingScene.id);
+  });
+  if (r.ok) render();
+}
+
+// ── Erros ─────────────────────────────────────────────────────────────────────
+
+// Toda chamada ao servidor pode falhar: internet caiu, sessão expirou, o
+// projeto Supabase foi pausado. Sem isto, a promessa rejeitava em silêncio e o
+// botão simplesmente não fazia nada — sem mensagem, sem pista.
+function traduzirFalha(erro) {
+  const m = (erro && erro.message) ? erro.message : String(erro || 'erro desconhecido');
+  if (/fetch failed|Failed to fetch|NetworkError|ENOTFOUND|ETIMEDOUT/i.test(m))
+    return 'Não foi possível falar com o servidor. Verifique a sua internet e tente de novo.';
+  if (/JWT|token|session|not authenticated|Unauthorized|401/i.test(m))
+    return 'A sua sessão expirou. Saia e entre de novo.';
+  if (/row-level security|42501/i.test(m))
+    return 'O servidor recusou a operação por permissão. Saia e entre de novo.';
+  if (/violates check constraint|23514/i.test(m))
+    return 'Algum campo tem valor inválido. Confira os dados e tente de novo.';
+  if (/duplicate key|23505/i.test(m))
+    return 'Já existe um item com esses dados.';
+  return 'Não deu certo: ' + m;
+}
+
+// Executa, e se falhar avisa o usuário em vez de morrer calado.
+async function tentar(rotulo, fn) {
+  try {
+    return { ok: true, valor: await fn() };
+  } catch (erro) {
+    console.error('[' + rotulo + ']', erro);
+    alert(traduzirFalha(erro));
+    return { ok: false, erro };
+  }
 }
 
 // ── Utilitários ───────────────────────────────────────────────────────────────
@@ -570,14 +619,19 @@ async function init() {
   const [prefs, user, scenes, sim, filterInfo] = await Promise.all([
     api.getPreferences(),
     api.getUser().catch(() => null),
-    api.getScenes().catch(() => []),
+    api.getScenes().catch(e => { console.error('[getScenes]', e); return { __falhou: e }; }),
     api.getSimState().catch(() => ({ active: false, type: 'protanopia' })),
     api.getFilterInfo().catch(() => ({}))
   ]);
 
   state.prefs      = prefs;
   state.user       = user;
-  state.scenes     = scenes;
+  state.scenes     = Array.isArray(scenes) ? scenes : [];
+  if (scenes && scenes.__falhou) {
+    // Lista vazia por falha é indistinguível de "você não tem cenas". Avisar.
+    setTimeout(() => alert('Não foi possível carregar as suas cenas.\n\n' +
+                           traduzirFalha(scenes.__falhou)), 400);
+  }
   state.sim        = sim;
   state.filterInfo = filterInfo;
 
