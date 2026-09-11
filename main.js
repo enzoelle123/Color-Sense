@@ -8,13 +8,14 @@ if (fs.existsSync(envFile)) {
   });
 }
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, desktopCapturer } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, desktopCapturer, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { getPreferences, savePreferences } = require('./src/store/preferences');
 const { SIMULATION_MATRICES, CORRECTION_MATRICES } = require('./src/algorithms/colorFilters');
 const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
 const { getScenes, createScene, updateScene, deleteScene, addPatternRule, updatePatternRule, deletePatternRule } = require('./src/store/sceneStore');
+const atualizacao = require('./src/updater');
 
 let mainWindow    = null;
 let tray          = null;
@@ -30,6 +31,11 @@ let cachedRules   = [];
 let simulationActive = false;
 let simulationType   = 'protanopia';
 
+// Vira true quando a abertura termina. Antes disso, abrir o programa de novo
+// não cria janela: ou a abertura ainda vai criar a sua, ou está instalando uma
+// atualização e o app vai fechar — criar outra aqui daria janela duplicada.
+let aberturaConcluida = false;
+
 app.setAppUserModelId('com.colorsense.app');
 
 // Instância única — se o app já está aberto, foca a janela existente
@@ -37,7 +43,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => { mostrarJanela(); });
+  app.on('second-instance', () => { if (aberturaConcluida) mostrarJanela(); });
 }
 
 // Traz o usuário de volta para alguma janela, sempre.
@@ -276,12 +282,6 @@ function startColorDaemon() {
     '-ParentPid', String(process.pid)
   ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 
-  let buf = '';
-
-  colorDaemon.stdout.on('data', (data) => {
-    buf += data.toString();
-    const lines = buf.split('\n');
-    buf = lines.pop();
   // Escrever num daemon que já morreu (travou, foi fechado ou o app está
   // saindo) falha com EPIPE de forma assíncrona, no próprio stream. Sem este
   // ouvinte o Node trata a falha como exceção não capturada: o Electron abre a
@@ -293,6 +293,12 @@ function startColorDaemon() {
     }
   });
 
+  let buf = '';
+
+  colorDaemon.stdout.on('data', (data) => {
+    buf += data.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop();
 
     lines.forEach(line => {
       line = line.trim();
@@ -345,18 +351,18 @@ function stopColorDaemon() {
   const d = colorDaemon;
   colorDaemon = null;
   daemonReady = false;
-}
-
-// ── Filter Logic ─────────────────────────────────────────────────────────────
-
-// Interpola a matriz com a identidade: 0 = sem efeito, 1 = efeito cheio.
-// É isso que dá sentido ao slider "Intensidade do Filtro" — antes o valor era
   // 'clear' devolve a tela ao normal, e o fim do stdin (EOF) faz o daemon sair
   // do laço, restaurar a tela de novo e encerrar sozinho. Sem kill() logo em
   // seguida: matar o processo com escritas ainda na fila gerava EPIPE na saída.
   // Se o daemon estiver travado, o vigia -ParentPid o derruba quando o app
   // terminar.
   try { d.stdin.end(JSON.stringify({ action: 'clear' }) + '\n'); } catch (_) {}
+}
+
+// ── Filter Logic ─────────────────────────────────────────────────────────────
+
+// Interpola a matriz com a identidade: 0 = sem efeito, 1 = efeito cheio.
+// É isso que dá sentido ao slider "Intensidade do Filtro" — antes o valor era
 // gravado nas preferências e nunca lido, então o controle não fazia nada.
 const IDENTIDADE_4X5 = [1, 0, 0, 0, 0,  0, 1, 0, 0, 0,  0, 0, 1, 0, 0,  0, 0, 0, 1, 0];
 
@@ -456,9 +462,27 @@ function buildTrayMenu() {
         }
       }))
     },
+    ...itensDeAtualizacao(),
     { type: 'separator' },
     { label: 'Sair', click: () => { appQuitting = true; app.quit(); } }
   ]);
+}
+
+// Itens da bandeja que só aparecem quando há algo a fazer com uma atualização.
+function itensDeAtualizacao() {
+  const { tipo, versao } = atualizacao.estadoAtual();
+  if (tipo === 'pronta') {
+    return [{ type: 'separator' },
+      { label: `Reiniciar e atualizar (versão ${versao})`, click: () => atualizacao.instalarAgora() }];
+  }
+  if (tipo === 'disponivel') {
+    return [{ type: 'separator' },
+      { label: `Baixar a versão ${versao}`, click: () => shell.openExternal(atualizacao.PAGINA_DE_DOWNLOAD) }];
+  }
+  if (tipo === 'baixando') {
+    return [{ type: 'separator' }, { label: `Baixando a versão ${versao}...`, enabled: false }];
+  }
+  return [];
 }
 
 function createTray() {
@@ -585,19 +609,41 @@ ipcMain.handle('scenes:activate', (_, sceneId, filterType, rules) => {
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  const session = await getSession();
-
   createTray();
-  startColorDaemon();
-  createOverlayWindows();
-  observarMonitores();
 
-  if (session) {
-    await refreshActiveRules();
-    createMainWindow();
-    applyCurrentFilter();
-  } else {
-    createAuthWindow();
+  atualizacao.configurar({
+    aoMudar: () => { if (tray) tray.setContextMenu(buildTrayMenu()); },
+    avisar: (title, content) => { if (tray) tray.displayBalloon({ title, content, iconType: 'info' }); },
+    // quitAndInstall fecha as janelas ANTES do before-quit. Sem isto, o 'close'
+    // do painel cancela o fechamento (ele só esconde a janela), o app não sai
+    // e a atualização não é instalada.
+    antesDeInstalar: () => { appQuitting = true; }
+  });
+
+  let instalando = false;
+  try {
+    // Versão baixada numa sessão anterior: instala antes de abrir qualquer
+    // janela, para o app não aparecer e sumir logo depois.
+    instalando = await atualizacao.instalarPendenteNaAbertura();
+    if (instalando) return;
+
+    const session = await getSession();
+
+    startColorDaemon();
+    createOverlayWindows();
+    observarMonitores();
+
+    if (session) {
+      await refreshActiveRules();
+      createMainWindow();
+      applyCurrentFilter();
+    } else {
+      createAuthWindow();
+    }
+  } finally {
+    aberturaConcluida = true;
+    // Mesmo se a abertura falhar: uma versão nova pode ser justamente a correção.
+    if (!instalando) atualizacao.iniciarVerificacoes();
   }
 });
 

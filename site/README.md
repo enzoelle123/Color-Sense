@@ -13,5 +13,7 @@ Depois de alterar o `index.html`, publique de dentro desta pasta:
 
 É preciso ter acesso ao projeto `colorsense-guia` na Vercel.
 
-Os links de download apontam para os arquivos da release `v0.2.0` deste
-repositório. Ao lançar uma versão nova, atualize esses links no `index.html`.
+Os botões de download apontam para `releases/latest/download/` deste
+repositório, então continuam certos a cada versão nova — desde que a release
+seja publicada com os nomes de arquivo sem versão (veja "Como lançar uma
+versão" no README principal).

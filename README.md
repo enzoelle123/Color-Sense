@@ -154,6 +154,34 @@ npm start
 O app abrirá com a tela de login. Após autenticar, o painel principal aparece e um ícone fica disponível na **bandeja do sistema** (system tray).
 
 
+## 🔄 Atualizações
+
+A versão **instalada** se atualiza sozinha pelas releases deste repositório:
+
+- ao abrir e a cada 4 horas, o app consulta a última release do GitHub;
+- se houver versão nova, ela é baixada em segundo plano — só os blocos que mudaram, quando dá;
+- a instalação acontece quando o app é fechado pelo menu da bandeja ou, se ele não for fechado, na próxima abertura, **antes** de qualquer janela aparecer. O menu da bandeja também oferece **Reiniciar e atualizar**.
+
+A versão **portátil** não tem instalação para trocar: ela só avisa que existe uma versão nova.
+
+Cada verificação fica registrada em `%APPDATA%\colorsense\atualizacao.log` — é o arquivo a pedir quando uma atualização falhar no computador de alguém.
+
+### Como lançar uma versão
+
+1. Aumente a versão em `package.json` (por exemplo, `0.3.0` → `0.3.1`). O app só se atualiza para uma versão **maior** que a instalada.
+2. Gere os arquivos com `npm run build`. Saem em `dist/`: `ColorSense-Setup.exe`, `ColorSense-Setup.exe.blockmap`, `latest.yml` e `ColorSense-Portable.exe`.
+3. Publique a release com a tag `v` + versão, enviando **os quatro arquivos**:
+
+```bash
+gh release create v0.3.1 dist/ColorSense-Setup.exe dist/ColorSense-Setup.exe.blockmap dist/latest.yml dist/ColorSense-Portable.exe --title "ColorSense 0.3.1"
+```
+
+Sem o `latest.yml`, os apps instalados não enxergam a versão nova; sem o `.blockmap`, baixam o instalador inteiro. A release precisa estar publicada — rascunho e pré-lançamento não contam como a última.
+
+Os nomes dos arquivos não têm versão de propósito: o site aponta para `releases/latest/download/`, e o link continua certo a cada lançamento.
+
+> Se o `npm run build` falhar com `Cannot create symbolic link`, ative o **Modo de desenvolvedor** do Windows (Configurações → Sistema → Para desenvolvedores) e rode de novo. O electron-builder extrai ferramentas que contêm links simbólicos, e sem esse modo o Windows só permite criá-los como administrador.
+
 ## ⚠️ Limitações
 
 - **Apenas Windows.** O filtro de tela inteira usa a Windows Magnification API, que não existe em macOS/Linux. Embora o `package.json` tenha alvos de build para os três sistemas, **só o Windows é funcional**.
