@@ -89,6 +89,7 @@ ColorSense/
 ├── .env                     # Credenciais do Supabase (NÃO versionado)
 ├── .env.example             # Template das credenciais
 ├── docs/                    # Documentação técnica
+├── site/                    # Guia do usuário (colorsense-guia.vercel.app)
 └── src/
     ├── algorithms/
     │   ├── colorFilters.js     # Matrizes de simulação e correção (daltonização)
