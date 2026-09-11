@@ -250,7 +250,7 @@ ipcMain.handle('overlay:get-source', async (_evt, displayId) => {
 // ── Color Daemon (Windows Magnification API) ─────────────────────────────────
 
 function startColorDaemon() {
-  if (colorDaemon) return;
+  if (colorDaemon || appQuitting) return;
 
   // No app empacotado o código vive dentro de app.asar, que é um FS virtual
   // visível só para o Electron. O powershell.exe é um processo externo e não
@@ -282,6 +282,17 @@ function startColorDaemon() {
     buf += data.toString();
     const lines = buf.split('\n');
     buf = lines.pop();
+  // Escrever num daemon que já morreu (travou, foi fechado ou o app está
+  // saindo) falha com EPIPE de forma assíncrona, no próprio stream. Sem este
+  // ouvinte o Node trata a falha como exceção não capturada: o Electron abre a
+  // caixa "A JavaScript error occurred in the main process" e, durante a
+  // saída, essa caixa ainda impede o processo de terminar.
+  colorDaemon.stdin.on('error', (err) => {
+    if (!['EPIPE', 'ERR_STREAM_DESTROYED', 'ERR_STREAM_WRITE_AFTER_END'].includes(err.code)) {
+      console.error('[ColorDaemon] stdin:', err);
+    }
+  });
+
 
     lines.forEach(line => {
       line = line.trim();
@@ -332,15 +343,6 @@ function sendToDaemon(command) {
 function stopColorDaemon() {
   if (!colorDaemon) return;
   const d = colorDaemon;
-  try {
-    // 'clear' antes de 'exit': devolve a tela ao normal enquanto o daemon ainda
-    // responde. O setTimeout que existia aqui não chegava a disparar, porque
-    // isto roda no before-quit e o processo termina antes de 1 segundo.
-    _sendToDaemon({ action: 'clear' });
-    _sendToDaemon({ action: 'exit' });
-  } catch (_) {}
-  // Rede de segurança: se o daemon travou e não leu o 'exit', ainda assim cai.
-  try { d.kill(); } catch (_) {}
   colorDaemon = null;
   daemonReady = false;
 }
@@ -349,6 +351,12 @@ function stopColorDaemon() {
 
 // Interpola a matriz com a identidade: 0 = sem efeito, 1 = efeito cheio.
 // É isso que dá sentido ao slider "Intensidade do Filtro" — antes o valor era
+  // 'clear' devolve a tela ao normal, e o fim do stdin (EOF) faz o daemon sair
+  // do laço, restaurar a tela de novo e encerrar sozinho. Sem kill() logo em
+  // seguida: matar o processo com escritas ainda na fila gerava EPIPE na saída.
+  // Se o daemon estiver travado, o vigia -ParentPid o derruba quando o app
+  // terminar.
+  try { d.stdin.end(JSON.stringify({ action: 'clear' }) + '\n'); } catch (_) {}
 // gravado nas preferências e nunca lido, então o controle não fazia nada.
 const IDENTIDADE_4X5 = [1, 0, 0, 0, 0,  0, 1, 0, 0, 0,  0, 0, 1, 0, 0,  0, 0, 0, 1, 0];
 
