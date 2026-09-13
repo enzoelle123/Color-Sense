@@ -13,5 +13,17 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/baixar",
+      "destination": "https://github.com/enzoelle123/Color-Sense/releases/latest/download/ColorSense-Setup.exe",
+      "permanent": false
+    },
+    {
+      "source": "/portatil",
+      "destination": "https://github.com/enzoelle123/Color-Sense/releases/latest/download/ColorSense-Portable.exe",
+      "permanent": false
+    }
   ]
 }
