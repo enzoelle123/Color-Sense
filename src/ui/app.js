@@ -64,7 +64,7 @@ function updateGlobalControls() {
 
   // A simulação do Criador tem prioridade sobre o filtro e afeta a tela toda.
   // Se ela está ligada, o rodapé precisa dizer isso mesmo quando o usuário já
-  // saiu daquela aba — senão o badge afirma "Ativo"/"Desativado" enquanto a
+  // saiu daquela aba — senão o badge afirma "Ativado"/"Desativado" enquanto a
   // tela está, na verdade, simulando daltonismo.
   if (state.sim?.active) {
     const tipo = FILTERS.find(f => f.key === state.sim.type)?.label || '';
@@ -73,7 +73,7 @@ function updateGlobalControls() {
     return;
   }
 
-  statusBadge.textContent = on ? 'Ativo' : 'Desativado';
+  statusBadge.textContent = on ? 'Ativado' : 'Desativado';
   statusBadge.className   = 'badge ' + (on ? 'badge-on' : 'badge-off');
 }
 
