@@ -25,5 +25,6 @@
       "destination": "https://github.com/enzoelle123/Color-Sense/releases/latest/download/ColorSense-Portable.exe",
       "permanent": false
     }
-  ]
+  ],
+  "cleanUrls": true
 }
