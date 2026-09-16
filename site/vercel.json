@@ -24,6 +24,11 @@
       "source": "/portatil",
       "destination": "https://github.com/enzoelle123/Color-Sense/releases/latest/download/ColorSense-Portable.exe",
       "permanent": false
+    },
+    {
+      "source": "/pesquisa",
+      "destination": "https://docs.google.com/forms/d/e/1FAIpQLScmKnil4-4K82SsI9SeEUvrM9ybrLkbMh_9lD0zDUflX08EIA/viewform",
+      "permanent": false
     }
   ],
   "cleanUrls": true

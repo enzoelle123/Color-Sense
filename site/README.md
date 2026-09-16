@@ -21,3 +21,7 @@ versão" no README principal).
 O `vercel.json` também cria os endereços curtos `/baixar` e `/portatil`, que
 redirecionam para os mesmos arquivos da última release. Eles existem para o
 endereço alternativo caber numa linha só, inclusive no celular.
+
+O endereço do formulário da pesquisa aparece só no `vercel.json`, no
+redirecionamento `/pesquisa`. Todos os botões do site usam `/pesquisa`: se o
+formulário for recriado, basta trocar o endereço ali e publicar.
