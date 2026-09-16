@@ -112,6 +112,16 @@
   .hero .alt { font-size:15px; opacity:.82; margin:26px auto 0; max-width:52ch; }
   .hero .alt a { color:#fff; }
 
+  /* Quem abre o link do WhatsApp no celular não consegue instalar o programa */
+  .so-celular { display:none; }
+  @media (hover:none) and (pointer:coarse) {
+    .so-celular {
+      display:block; margin:-12px auto 26px; max-width:36ch;
+      background:rgba(255,255,255,.12); border-radius:8px;
+      padding:11px 16px; font-size:15.5px; line-height:1.5;
+    }
+  }
+
   /* Os dois passos da participação, lado a lado no topo */
   .participar {
     list-style:none; margin:0 auto; padding:0; max-width:760px;
