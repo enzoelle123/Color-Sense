@@ -73,9 +73,19 @@ document.getElementById('form-register').addEventListener('submit', async (e) =>
 });
 
 function traduzirErro(msg) {
+  msg = String(msg || '');
   if (msg.includes('Invalid login credentials')) return 'Email ou senha incorretos.';
   if (msg.includes('Email not confirmed'))       return 'Confirme seu email antes de entrar.';
   if (msg.includes('already registered'))        return 'Este email já está cadastrado.';
   if (msg.includes('Password should be'))        return 'A senha deve ter ao menos 6 caracteres.';
-  return msg;
+  // Sem este ramo, quando o servidor está fora do ar a tela de entrada mostrava
+  // "fetch failed" em inglês — foi o que o participante do estudo viu quando o
+  // projeto do Supabase foi pausado.
+  if (/fetch failed|Failed to fetch|NetworkError|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|AuthRetryableFetchError/i.test(msg))
+    return 'Não foi possível falar com o servidor do ColorSense. Confira a sua internet; ' +
+           'se ela estiver boa, o servidor pode estar fora do ar — tente mais tarde e avise ' +
+           'a equipe pelo site colorsense-guia.vercel.app.';
+  if (/rate limit|too many requests/i.test(msg))
+    return 'Muitas tentativas seguidas. Espere um minuto e tente de novo.';
+  return 'Não deu certo: ' + msg;
 }
