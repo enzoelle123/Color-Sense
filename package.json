@@ -1,6 +1,6 @@
 {
   "name": "colorsense",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Ferramenta de acessibilidade visual para pessoas com daltonismo",
   "main": "main.js",
   "scripts": {

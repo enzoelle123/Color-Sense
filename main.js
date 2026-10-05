@@ -16,6 +16,7 @@ const { SIMULATION_MATRICES, CORRECTION_MATRICES } = require('./src/algorithms/c
 const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
 const { getScenes, createScene, updateScene, deleteScene, addPatternRule, updatePatternRule, deletePatternRule } = require('./src/store/sceneStore');
 const atualizacao = require('./src/updater');
+const { registrar } = require('./src/registro');
 
 let mainWindow    = null;
 let tray          = null;
@@ -62,7 +63,7 @@ async function mostrarJanela() {
 
   // Nenhuma janela viva: a sessão decide qual abrir.
   let sessao = null;
-  try { sessao = await getSession(); } catch (_) {}
+  try { sessao = (await getSession()).session; } catch (_) {}
 
   if (sessao) {
     createMainWindow();
@@ -74,8 +75,23 @@ async function mostrarJanela() {
 }
 
 let authWindow = null;
+let daemonIndisponivel = false;
 
-function createAuthWindow() {
+// A interface dizia "Ativado" mesmo quando a correção de cor nunca subiu. Aqui
+// o estado real vira aviso na bandeja, registro em arquivo e recado para o
+// painel, que mostra "Correção indisponível neste computador".
+function avisarFalhaDoDaemon(mensagem) {
+  daemonIndisponivel = true;
+  if (tray) {
+    tray.setToolTip('ColorSense — correção de cor indisponível');
+    try {
+      tray.displayBalloon({ title: 'ColorSense', content: mensagem, iconType: 'warning' });
+    } catch (_) { /* balão é um extra */ }
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('daemon:indisponivel', mensagem);
+}
+
+function createAuthWindow(opcoes = {}) {
   authWindow = new BrowserWindow({
     width: 420,
     height: 520,
@@ -88,7 +104,8 @@ function createAuthWindow() {
     }
   });
 
-  authWindow.loadFile(path.join(__dirname, 'src', 'auth', 'auth.html'));
+  authWindow.loadFile(path.join(__dirname, 'src', 'auth', 'auth.html'),
+    opcoes.semServidor ? { query: { semServidor: '1' } } : undefined);
   authWindow.setMenuBarVisibility(false);
 
   authWindow.on('closed', () => { authWindow = null; });
@@ -211,14 +228,32 @@ async function refreshActiveRules() {
   } else {
     try {
       const { supabase } = require('./src/store/supabase');
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('pattern_rules')
-        .select('*')
-        .eq('scene_id', prefs.activeSceneId);
+        .select('id, scene_id, label, color_hex, hue_center, hue_tolerance, pattern, opacity')
+        .eq('scene_id', prefs.activeSceneId)
+        .order('id');                       // ordem estável entre sessões
+      if (error) throw error;
+
+      if (data.length === 0) {
+        // Pode ser cena sem regras — ou cena que não existe mais (banco
+        // recriado, cena apagada em outro computador). Sem distinguir, os
+        // padrões sumiam para sempre naquela máquina.
+        const { data: cena } = await supabase
+          .from('scenes').select('id').eq('id', prefs.activeSceneId).maybeSingle();
+        if (!cena) {
+          registrar('AVISO', 'cena ativa não existe mais no servidor:', prefs.activeSceneId);
+          savePreferences({ activeSceneId: null });
+        }
+      }
       cachedRules = data || [];
     } catch (err) {
-      console.error('[Overlay] erro ao carregar regras:', err.message);
-      cachedRules = [];
+      // Falha de rede não apaga o que está na tela: padrão velho é melhor do
+      // que padrão nenhum, e a interface continuava dizendo que a cena estava
+      // ativa enquanto o overlay era limpo em silêncio.
+      registrar('ERRO', 'não deu para carregar as regras:', err);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('regras:desatualizadas');
+      return;
     }
   }
 
@@ -281,6 +316,16 @@ function startColorDaemon() {
     '-File', scriptPath,
     '-ParentPid', String(process.pid)
   ], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+
+  // Sem este ouvinte, um powershell.exe fora do PATH vira exceção não
+  // capturada e o Electron abre a caixa cinza de erro antes de qualquer
+  // janela. Acontece em computador com PATH truncado ou PowerShell bloqueado.
+  colorDaemon.on('error', (err) => {
+    colorDaemon = null;
+    daemonReady = false;
+    registrar('ERRO', 'daemon de cor não iniciou:', err);
+    avisarFalhaDoDaemon('O Windows não deixou o ColorSense ligar a correção de cor neste computador.');
+  });
 
   // Escrever num daemon que já morreu (travou, foi fechado ou o app está
   // saindo) falha com EPIPE de forma assíncrona, no próprio stream. Sem este
@@ -558,7 +603,8 @@ ipcMain.handle('sim:set-type', (_, type) => {
 ipcMain.handle('auth:sign-up',     (_, data)        => signUp(data));
 ipcMain.handle('auth:sign-in',     (_, data)        => signIn(data));
 ipcMain.handle('auth:sign-out', async () => {
-  await signOut();
+  // Sair é sempre local: se o servidor não responder, a pessoa sai mesmo assim.
+  try { await signOut(); } catch (erro) { registrar('AVISO', 'sair:', erro); }
   savePreferences({ activeSceneId: null, filterActive: false });
   cachedRules = [];
   simulationActive = false;
@@ -567,8 +613,10 @@ ipcMain.handle('auth:sign-out', async () => {
   if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
   createAuthWindow();
 });
-ipcMain.handle('auth:get-session', ()               => getSession());
+ipcMain.handle('auth:get-session', async ()         => (await getSession()).session);
 ipcMain.handle('auth:get-user',    ()               => getUser());
+ipcMain.handle('app:get-version',  ()               => app.getVersion());
+ipcMain.handle('app:get-estado',   ()               => ({ daemonIndisponivel }));
 
 // ── IPC: Cenas ────────────────────────────────────────────────────────────────
 
@@ -627,19 +675,32 @@ app.whenReady().then(async () => {
     instalando = await atualizacao.instalarPendenteNaAbertura();
     if (instalando) return;
 
-    const session = await getSession();
-
+    // A correção de cor é local: não depende de servidor nem de sessão. Antes
+    // ela só era aplicada depois do login, então um servidor fora do ar tirava
+    // a acessibilidade de quem já tinha deixado o filtro ligado.
     startColorDaemon();
     createOverlayWindows();
     observarMonitores();
+    applyCurrentFilter();
+
+    const { session, semServidor } = await getSession();
 
     if (session) {
-      await refreshActiveRules();
       createMainWindow();
-      applyCurrentFilter();
+      refreshActiveRules();
+    } else if (semServidor) {
+      // Sem servidor não adianta pedir senha: o filtro continua valendo e o
+      // painel abre avisando o que está acontecendo.
+      registrar('AVISO', 'abrindo sem servidor: o login ficará indisponível');
+      createAuthWindow({ semServidor: true });
     } else {
       createAuthWindow();
     }
+  } catch (erro) {
+    registrar('ERRO', 'falha na abertura:', erro);
+    // Nunca terminar a abertura sem janela nenhuma: o app ficava só na
+    // bandeja e, para quem não sabe disso, simplesmente "não abre".
+    if (!mainWindow && !authWindow) createAuthWindow();
   } finally {
     aberturaConcluida = true;
     // Mesmo se a abertura falhar: uma versão nova pode ser justamente a correção.

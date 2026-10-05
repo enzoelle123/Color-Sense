@@ -1,5 +1,14 @@
 const { supabase } = require('./supabase');
 
+// Sem isto, sessão expirada virava "Cannot read properties of null (reading
+// 'id')" na cara do participante.
+async function usuarioAtual() {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  if (!user) throw new Error('Sessão expirada. Entre novamente.');
+  return user;
+}
+
 async function getScenes() {
   const { data, error } = await supabase
     .from('scenes')
@@ -10,7 +19,7 @@ async function getScenes() {
 }
 
 async function createScene({ name, filterType = 'normal', isDefault = false }) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioAtual();
 
   if (isDefault) {
     await supabase.from('scenes').update({ is_default: false }).eq('user_id', user.id);
@@ -26,7 +35,7 @@ async function createScene({ name, filterType = 'normal', isDefault = false }) {
 }
 
 async function updateScene(id, fields) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await usuarioAtual();
 
   if (fields.is_default) {
     await supabase.from('scenes').update({ is_default: false }).eq('user_id', user.id);

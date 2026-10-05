@@ -72,6 +72,14 @@ document.getElementById('form-register').addEventListener('submit', async (e) =>
   }
 });
 
+// Quando o app abre sem conseguir falar com o servidor, não adianta pedir
+// senha: o aviso aparece antes de a pessoa tentar e errar três vezes.
+if (new URLSearchParams(location.search).get('semServidor') === '1') {
+  const alvo = document.getElementById('login-error');
+  if (alvo) alvo.textContent = 'O servidor do ColorSense não está respondendo agora. ' +
+    'A correção de cor continua funcionando; entrar e salvar cenas volta quando o servidor voltar.';
+}
+
 function traduzirErro(msg) {
   msg = String(msg || '');
   if (msg.includes('Invalid login credentials')) return 'Email ou senha incorretos.';

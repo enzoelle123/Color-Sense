@@ -17,6 +17,12 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   getSession: ()      => ipcRenderer.invoke('auth:get-session'),
   getUser:    ()      => ipcRenderer.invoke('auth:get-user'),
 
+  // App
+  getVersion: ()      => ipcRenderer.invoke('app:get-version'),
+  getEstado:  ()      => ipcRenderer.invoke('app:get-estado'),
+  onDaemonIndisponivel: (cb) => ipcRenderer.on('daemon:indisponivel', (_, m) => cb(m)),
+  onRegrasDesatualizadas: (cb) => ipcRenderer.on('regras:desatualizadas', () => cb()),
+
   // Cenas
   getScenes:        ()           => ipcRenderer.invoke('scenes:get-all'),
   createScene:      (data)       => ipcRenderer.invoke('scenes:create', data),

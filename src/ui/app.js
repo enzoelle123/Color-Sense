@@ -58,9 +58,21 @@ function render() {
   updateGlobalControls();
 }
 
+// Ligado pelo processo principal quando a correção de cor não consegue subir
+// neste computador (PowerShell bloqueado, por exemplo).
+let daemonIndisponivel = false;
+
 function updateGlobalControls() {
   const on = state.prefs.filterActive;
   globalToggle.checked = on || false;
+
+  // Prometer "Ativado" quando a correção nem subiu faz o participante achar
+  // que o app funcionou e responder a pesquisa a partir disso.
+  if (daemonIndisponivel) {
+    statusBadge.textContent = 'Correção indisponível';
+    statusBadge.className   = 'badge badge-off';
+    return;
+  }
 
   // A simulação do Criador tem prioridade sobre o filtro e afeta a tela toda.
   // Se ela está ligada, o rodapé precisa dizer isso mesmo quando o usuário já
@@ -599,7 +611,8 @@ globalToggle.addEventListener('change', async () => {
   render();
 });
 
-document.getElementById('btn-logout').addEventListener('click', () => api.signOut());
+document.getElementById('btn-logout').addEventListener('click', () =>
+  api.signOut().catch(erro => alert(traduzirFalha(erro))));
 
 // O toggle universal desliga a simulação no processo principal; a aba Criador
 // precisa saber disso para não exibir um estado que já não é verdade.
@@ -619,9 +632,29 @@ api.onApplyFilter(({ type, active }) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 async function init() {
+  // Versão real no rodapé: sem isto a tela dizia "v0.1" e o relato do
+  // participante não dizia a qual versão pertencia.
+  api.getVersion().then(v => {
+    const alvo = document.getElementById('app-versao');
+    if (alvo) alvo.textContent = 'ColorSense v' + v + ' · PUCPR';
+  }).catch(() => {});
+
+  // A correção de cor pode não subir (PowerShell bloqueado por política da
+  // escola ou da empresa). Antes disso o rodapé dizia "Ativado" assim mesmo.
+  const marcarDaemonIndisponivel = (mensagem) => {
+    daemonIndisponivel = true;
+    if (statusBadge) statusBadge.title = mensagem || 'A correção de cor não pôde ser ligada neste computador.';
+    updateGlobalControls();
+  };
+  api.getEstado?.().then(e => { if (e && e.daemonIndisponivel) marcarDaemonIndisponivel(); }).catch(() => {});
+  api.onDaemonIndisponivel?.(marcarDaemonIndisponivel);
+  api.onRegrasDesatualizadas?.(() => setTimeout(() => alert(
+    'Não deu para falar com o servidor agora, então os padrões visuais podem estar ' +
+    'desatualizados. Eles continuam na tela como estavam.'), 400));
+
   const [prefs, user, scenes, sim, filterInfo] = await Promise.all([
     api.getPreferences(),
-    api.getUser().catch(() => null),
+    api.getUser().catch(e => { console.error('[perfil]', e && e.message); return null; }),
     api.getScenes().catch(e => { console.error('[getScenes]', e); return { __falhou: e }; }),
     api.getSimState().catch(() => ({ active: false, type: 'protanopia' })),
     api.getFilterInfo().catch(() => ({}))

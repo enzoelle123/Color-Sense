@@ -57,6 +57,7 @@ create table if not exists public.scenes (
 );
 
 create index if not exists scenes_user_id_idx on public.scenes (user_id);
+create index if not exists scenes_user_id_created_at_idx on public.scenes (user_id, created_at);
 
 -- No máximo uma cena padrão por usuário. O app já zera as outras antes de
 -- marcar uma nova (sceneStore.js), então isto é rede de segurança.
@@ -75,6 +76,7 @@ create table if not exists public.pattern_rules (
   hue_tolerance  integer not null default 30,
   pattern        text not null,
   opacity        real not null default 0.7,
+  created_at     timestamptz not null default now(),
 
   -- O overlay chama getPatternTile(pattern) e devolve tile vazio para valor
   -- desconhecido: a regra sumia da tela sem erro. Esta lista é a mesma de
@@ -89,6 +91,12 @@ create table if not exists public.pattern_rules (
 );
 
 create index if not exists pattern_rules_scene_id_idx on public.pattern_rules (scene_id);
+
+-- O overlay desenha uma máscara por regra, uma sobre a outra. Sem ordem
+-- estável, duas regras com faixas de matiz vizinhas trocavam de lugar entre
+-- sessões e a mesma cena aparecia diferente para o mesmo participante.
+create index if not exists pattern_rules_scene_id_created_at_idx
+  on public.pattern_rules (scene_id, created_at);
 
 
 -- ─── Row Level Security ──────────────────────────────────────────────────────
@@ -111,6 +119,14 @@ create policy "perfil proprio: ler"
 create policy "perfil proprio: atualizar"
   on public.users for update
   using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+-- Sem esta política, um perfil que não existe (gatilho não rodou, linha
+-- apagada à mão) não tinha como ser recriado pelo app: o tipo de daltonismo
+-- da pessoa — o dado da pesquisa — sumia em silêncio.
+drop policy if exists "perfil proprio: criar" on public.users;
+create policy "perfil proprio: criar"
+  on public.users for insert
   with check (auth.uid() = id);
 
 -- scenes: dono total sobre as próprias cenas.
@@ -189,9 +205,17 @@ begin
 
   -- Cena padrão já com o filtro do tipo declarado: o usuário abre o app e o
   -- filtro dele está a um clique, em vez de uma lista vazia.
-  insert into public.scenes (user_id, name, filter_type, is_default)
-  values (new.id, 'Padrão', v_tipo, true)
-  on conflict do nothing;
+  --
+  -- Dentro de um bloco próprio porque o gatilho roda na mesma transação do
+  -- cadastro: sem isto, qualquer tropeço aqui derrubava a criação da conta
+  -- inteira e o participante via "Database error saving new user". O perfil
+  -- acima é essencial e pode mesmo derrubar; a cena é conforto.
+  begin
+    insert into public.scenes (user_id, name, filter_type, is_default)
+    values (new.id, 'Padrão', v_tipo, true);
+  exception when others then
+    raise warning 'cena padrão não criada para %: %', new.id, sqlerrm;
+  end;
 
   return new;
 end;
