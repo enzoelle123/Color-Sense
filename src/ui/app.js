@@ -532,7 +532,10 @@ async function deleteRule(ruleId) {
 function traduzirFalha(erro) {
   const m = (erro && erro.message) ? erro.message : String(erro || 'erro desconhecido');
   if (/fetch failed|Failed to fetch|NetworkError|ENOTFOUND|ETIMEDOUT/i.test(m))
-    return 'Não foi possível falar com o servidor. Verifique a sua internet e tente de novo.';
+    return 'Não foi possível falar com o servidor do ColorSense.\n\n' +
+           'Confira a sua internet e tente de novo. Se a internet estiver boa, ' +
+           'o servidor pode estar fora do ar: avise a equipe pelo site ' +
+           'colorsense-guia.vercel.app e tente mais tarde.';
   if (/JWT|token|session|not authenticated|Unauthorized|401/i.test(m))
     return 'A sua sessão expirou. Saia e entre de novo.';
   if (/row-level security|42501/i.test(m))
