@@ -90,6 +90,11 @@ create table if not exists public.pattern_rules (
   constraint pattern_rules_opacidade check (opacity between 0 and 1)
 );
 
+-- Banco criado antes desta coluna existir: o create table acima não mexe em
+-- tabela que já existe, então a coluna entra aqui.
+alter table public.pattern_rules
+  add column if not exists created_at timestamptz not null default now();
+
 create index if not exists pattern_rules_scene_id_idx on public.pattern_rules (scene_id);
 
 -- O overlay desenha uma máscara por regra, uma sobre a outra. Sem ordem
