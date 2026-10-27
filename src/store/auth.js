@@ -24,6 +24,26 @@ async function signOut() {
   if (error) console.warn('[auth] sair (local):', error.message);
 }
 
+// Confere a senha atual antes de trocar: sem isso, quem achasse o computador
+// de alguém aberto no ColorSense trocava a senha da conta sem saber a antiga.
+async function changePassword({ senhaAtual, novaSenha }) {
+  const { data: { user }, error: erroUser } = await supabase.auth.getUser();
+  if (erroUser) throw erroUser;
+  if (!user || !user.email) throw new Error('not authenticated');
+
+  const { error: erroConferir } = await supabase.auth.signInWithPassword({
+    email: user.email, password: senhaAtual
+  });
+  if (erroConferir) {
+    if (/Invalid login credentials/i.test(erroConferir.message || ''))
+      throw new Error('SENHA_ATUAL_ERRADA');
+    throw erroConferir;
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: novaSenha });
+  if (error) throw error;
+}
+
 // Devolve também se a falha foi de rede: sem isso, "não tem sessão" e "o
 // servidor está fora do ar" chegavam iguais (null) e o app pedia senha a quem
 // nunca ia conseguir entrar.
@@ -72,4 +92,4 @@ async function getUser() {
   return criado;
 }
 
-module.exports = { signUp, signIn, signOut, getSession, getUser };
+module.exports = { signUp, signIn, signOut, changePassword, getSession, getUser };

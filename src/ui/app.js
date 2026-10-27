@@ -614,6 +614,66 @@ globalToggle.addEventListener('change', async () => {
 document.getElementById('btn-logout').addEventListener('click', () =>
   api.signOut().catch(erro => alert(traduzirFalha(erro))));
 
+// ── Trocar senha ──────────────────────────────────────────────────────────────
+
+const dlgSenha       = document.getElementById('dlg-senha');
+const formSenha      = document.getElementById('form-senha');
+const msgSenha       = document.getElementById('senha-msg');
+const btnSalvarSenha = document.getElementById('senha-salvar');
+
+function avisoSenha(texto, ok = false) {
+  msgSenha.textContent = texto;
+  msgSenha.classList.toggle('dialog-msg-ok', ok);
+  msgSenha.hidden = !texto;
+}
+
+function traduzirFalhaSenha(erro) {
+  const m = (erro && erro.message) || '';
+  if (/SENHA_ATUAL_ERRADA/.test(m)) return 'A senha atual está errada.';
+  if (/different from the old|same_password/i.test(m))
+    return 'A nova senha precisa ser diferente da atual.';
+  if (/Password should be|weak_password/i.test(m))
+    return 'A nova senha deve ter ao menos 6 caracteres.';
+  if (/rate limit|429|over_request/i.test(m))
+    return 'Muitas tentativas seguidas. Espere um minuto e tente de novo.';
+  return traduzirFalha(erro);
+}
+
+document.getElementById('btn-senha').addEventListener('click', () => {
+  formSenha.reset();
+  avisoSenha('');
+  btnSalvarSenha.disabled = false;
+  dlgSenha.showModal();
+  document.getElementById('senha-atual').focus();
+});
+
+document.getElementById('senha-cancelar').addEventListener('click', () => dlgSenha.close());
+
+formSenha.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const senhaAtual = document.getElementById('senha-atual').value;
+  const novaSenha  = document.getElementById('senha-nova').value;
+  const confirma   = document.getElementById('senha-confirma').value;
+
+  if (!senhaAtual)              return avisoSenha('Digite a sua senha atual.');
+  if (novaSenha.length < 6)     return avisoSenha('A nova senha deve ter ao menos 6 caracteres.');
+  if (novaSenha !== confirma)   return avisoSenha('As duas novas senhas não são iguais.');
+  if (novaSenha === senhaAtual) return avisoSenha('A nova senha precisa ser diferente da atual.');
+
+  btnSalvarSenha.disabled = true;
+  avisoSenha('Trocando...', true);
+  try {
+    await api.changePassword({ senhaAtual, novaSenha });
+    formSenha.reset();
+    avisoSenha('Senha trocada. Use a nova senha da próxima vez que entrar.', true);
+    setTimeout(() => { if (dlgSenha.open) dlgSenha.close(); }, 1800);
+  } catch (erro) {
+    console.error('[trocarSenha]', erro);
+    avisoSenha(traduzirFalhaSenha(erro));
+    btnSalvarSenha.disabled = false;
+  }
+});
+
 // O toggle universal desliga a simulação no processo principal; a aba Criador
 // precisa saber disso para não exibir um estado que já não é verdade.
 api.onSimChange?.((sim) => {

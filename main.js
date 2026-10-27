@@ -13,7 +13,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { getPreferences, savePreferences } = require('./src/store/preferences');
 const { SIMULATION_MATRICES, CORRECTION_MATRICES } = require('./src/algorithms/colorFilters');
-const { signUp, signIn, signOut, getSession, getUser } = require('./src/store/auth');
+const { signUp, signIn, signOut, changePassword, getSession, getUser } = require('./src/store/auth');
 const { getScenes, createScene, updateScene, deleteScene, addPatternRule, updatePatternRule, deletePatternRule } = require('./src/store/sceneStore');
 const atualizacao = require('./src/updater');
 const { registrar } = require('./src/registro');
@@ -613,6 +613,7 @@ ipcMain.handle('auth:sign-out', async () => {
   if (mainWindow) { mainWindow.destroy(); mainWindow = null; }
   createAuthWindow();
 });
+ipcMain.handle('auth:change-password', (_, data) => changePassword(data));
 ipcMain.handle('auth:get-session', async ()         => (await getSession()).session);
 ipcMain.handle('auth:get-user',    ()               => getUser());
 ipcMain.handle('app:get-version',  ()               => app.getVersion());

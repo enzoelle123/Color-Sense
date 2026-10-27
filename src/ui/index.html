@@ -18,7 +18,8 @@
       </div>
       <div class="header-right">
         <span id="user-name" class="user-name"></span>
-        <button id="btn-logout" class="btn-icon" title="Sair">⏻</button>
+        <button id="btn-senha" class="btn-icon" title="Trocar senha" aria-label="Trocar senha">🔑</button>
+        <button id="btn-logout" class="btn-icon" title="Sair" aria-label="Sair">⏻</button>
       </div>
     </header>
 
@@ -42,6 +43,30 @@
     </footer>
 
   </div>
+
+  <dialog id="dlg-senha" class="dialog" aria-labelledby="dlg-senha-titulo">
+    <form id="form-senha" class="dialog-form" novalidate>
+      <h2 id="dlg-senha-titulo" class="edit-title">Trocar senha</h2>
+      <div class="field">
+        <label for="senha-atual">Senha atual</label>
+        <input id="senha-atual" class="input" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label for="senha-nova">Nova senha</label>
+        <input id="senha-nova" class="input" type="password" autocomplete="new-password" minlength="6" required>
+      </div>
+      <div class="field">
+        <label for="senha-confirma">Repita a nova senha</label>
+        <input id="senha-confirma" class="input" type="password" autocomplete="new-password" minlength="6" required>
+      </div>
+      <p id="senha-msg" class="dialog-msg" role="alert" hidden></p>
+      <div class="form-actions">
+        <button type="button" id="senha-cancelar" class="btn-sm">Cancelar</button>
+        <button type="submit" id="senha-salvar" class="btn-sm btn-primary">Trocar senha</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
