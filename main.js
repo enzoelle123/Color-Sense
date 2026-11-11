@@ -655,6 +655,97 @@ ipcMain.handle('scenes:activate', (_, sceneId, filterType, rules) => {
   return getPreferences();
 });
 
+ipcMain.handle('scenes:deactivate', () => {
+  // Só a cena sai: os padrões visuais somem, o filtro de cor fica como está.
+  savePreferences({ activeSceneId: null });
+  cachedRules = [];
+  syncOverlay();
+  if (tray) tray.setContextMenu(buildTrayMenu());
+  return getPreferences();
+});
+
+// ── Seletor de cor da tela ───────────────────────────────────────────────────
+// O seletor nativo do Windows (input type=color) é uma janela modal que trava o
+// ColorSense e não pega cor de outro programa. Aqui o painel e os padrões
+// visuais somem, o monitor sob o mouse é fotografado e a pessoa clica no pixel.
+
+let seletorAberto = null;
+
+ipcMain.handle('picker:open', async () => {
+  if (seletorAberto) return null;
+
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const overlaysVisiveis = overlayWindows.filter(o => !o.win.isDestroyed() && o.win.isVisible());
+  const restaurar = () => {
+    for (const { win } of overlaysVisiveis) if (!win.isDestroyed()) win.showInactive();
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+  };
+
+  if (mainWindow) mainWindow.hide();
+  for (const { win } of overlaysVisiveis) win.hide();
+  await new Promise(r => setTimeout(r, 300));   // dá tempo de o Windows redesenhar
+
+  let retrato;
+  try {
+    const { width, height } = display.size;
+    const fator = display.scaleFactor || 1;
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: Math.round(width * fator), height: Math.round(height * fator) }
+    });
+    const fonte = sources.find(s => String(s.display_id) === String(display.id)) || sources[0];
+    if (!fonte) throw new Error('nenhuma tela para capturar');
+    retrato = fonte.thumbnail.toDataURL();
+  } catch (erro) {
+    registrar('AVISO', 'seletor de cor:', erro);
+    restaurar();
+    throw erro;
+  }
+
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      ...display.bounds,
+      frame: false,
+      resizable: false,
+      movable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'src', 'ui', 'picker-preload.js')
+      }
+    });
+    seletorAberto = win;
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setBounds(display.bounds);
+
+    let resposta = null;
+    const aoEscolher = (evt, hex) => {
+      if (evt.sender !== win.webContents) return;
+      resposta = typeof hex === 'string' && /^#[0-9a-f]{6}$/i.test(hex) ? hex : null;
+      if (!win.isDestroyed()) win.close();
+    };
+    ipcMain.on('picker:escolhido', aoEscolher);
+
+    // Fechou por qualquer caminho (escolha, Esc, Alt+F4): o painel sempre volta.
+    win.on('closed', () => {
+      ipcMain.removeListener('picker:escolhido', aoEscolher);
+      seletorAberto = null;
+      restaurar();
+      resolve(resposta);
+    });
+
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.send('picker:retrato', retrato);
+      win.show();
+      win.focus();
+    });
+    win.loadFile(path.join(__dirname, 'src', 'ui', 'picker.html'));
+  });
+});
+
 // ── App Lifecycle ─────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {

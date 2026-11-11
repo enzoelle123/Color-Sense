@@ -104,7 +104,10 @@ function renderFilter() {
           <p class="label">${esc(activeScene.name)}</p>
           <p class="sublabel">Cena ativa · ${filterLabel}</p>
         </div>
-        <button class="btn-sm" id="btn-switch">Trocar cena</button>
+        <div class="banner-actions">
+          <button class="btn-sm" id="btn-switch">Trocar cena</button>
+          <button class="btn-sm" id="btn-deactivate-scene" title="Tira os padrões visuais da cena. O filtro de cor continua ligado.">Desativar cena</button>
+        </div>
       </div>
     </div>` : ''}
 
@@ -147,6 +150,7 @@ function renderFilter() {
   });
 
   document.getElementById('btn-switch')?.addEventListener('click', () => switchTab('scenes'));
+  document.getElementById('btn-deactivate-scene')?.addEventListener('click', deactivateScene);
 
   const slider  = document.getElementById('opacity-slider');
   const opLabel = document.getElementById('opacity-value');
@@ -178,6 +182,8 @@ function renderScenes() {
   state.scenes.forEach(s => {
     document.getElementById(`btn-activate-${s.id}`)
       ?.addEventListener('click', () => activateScene(s));
+    document.getElementById(`btn-deactivate-${s.id}`)
+      ?.addEventListener('click', deactivateScene);
     document.getElementById(`btn-edit-${s.id}`)
       .addEventListener('click', () => openEdit(s));
     document.getElementById(`btn-delete-${s.id}`)
@@ -203,7 +209,9 @@ function sceneCardHTML(s, activeId) {
         </div>
       </div>
       <div class="profile-card-actions">
-        ${!isActive ? `<button class="btn-sm btn-primary" id="btn-activate-${s.id}">Ativar</button>` : ''}
+        ${!isActive
+          ? `<button class="btn-sm btn-primary" id="btn-activate-${s.id}">Ativar</button>`
+          : `<button class="btn-sm" id="btn-deactivate-${s.id}" title="Tira os padrões visuais da cena. O filtro de cor continua ligado.">Desativar</button>`}
         <button class="btn-sm" id="btn-edit-${s.id}">Editar</button>
         ${!s.is_default ? `<button class="btn-sm btn-danger" id="btn-delete-${s.id}">Excluir</button>` : ''}
       </div>
@@ -214,6 +222,13 @@ function sceneCardHTML(s, activeId) {
 async function activateScene(scene) {
   const r = await tentar('activateScene', async () => {
     state.prefs = await api.activateScene(scene.id, scene.filter_type, scene.pattern_rules || []);
+  });
+  if (r.ok) render();
+}
+
+async function deactivateScene() {
+  const r = await tentar('deactivateScene', async () => {
+    state.prefs = await api.deactivateScene();
   });
   if (r.ok) render();
 }
@@ -410,6 +425,7 @@ function ruleFormHTML(r) {
             <input type="color" id="r-color" value="${hex}">
             <input type="text"  id="r-hex" class="input input-sm" value="${hex}" maxlength="7">
           </div>
+          <button type="button" class="btn-sm btn-pick" id="r-pick" title="O ColorSense some, você clica na cor em qualquer programa. Esc cancela.">🎯 Pegar cor da tela</button>
         </div>
         <div class="field">
           <label>Padrão visual</label>
@@ -447,6 +463,14 @@ function bindRuleFormEvents() {
   const hexInput    = document.getElementById('r-hex');
 
   colorPicker.addEventListener('input', (e) => { hexInput.value = e.target.value; });
+
+  document.getElementById('r-pick').addEventListener('click', async () => {
+    const r = await tentar('pickScreenColor', () => api.pickScreenColor());
+    if (r.ok && r.valor) {
+      colorPicker.value = r.valor;
+      hexInput.value    = r.valor;
+    }
+  });
 
   hexInput.addEventListener('change', (e) => {
     if (/^#[0-9a-f]{6}$/i.test(e.target.value))

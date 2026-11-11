@@ -485,3 +485,8 @@ footer {
 
 .dialog-msg { font-size: 12px; color: var(--danger); line-height: 1.4; }
 .dialog-msg-ok { color: var(--success); }
+
+/* ── Cena ativa e seletor de cor ────────────────────────────────────────────── */
+
+.banner-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.btn-pick { margin-top: 6px; align-self: flex-start; }

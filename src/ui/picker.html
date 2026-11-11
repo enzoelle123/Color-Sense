@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Pegar cor da tela</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; cursor: crosshair; user-select: none; }
+    #tela { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+    #lupa {
+      position: fixed; width: 132px; pointer-events: none; display: none;
+      background: #1a1d27; border: 1px solid #2e3348; border-radius: 10px; padding: 6px;
+      font: 600 12px 'Segoe UI', sans-serif; color: #e8eaf6; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+    }
+    #zoom { display: block; width: 120px; height: 120px; image-rendering: pixelated; border-radius: 6px; }
+    #info { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    #amostra { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,.3); }
+    #dica {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      background: #1a1d27; color: #e8eaf6; border: 1px solid #2e3348; border-radius: 10px;
+      padding: 10px 16px; font: 13px 'Segoe UI', sans-serif; display: flex; gap: 12px; align-items: center;
+    }
+    #dica button {
+      background: #22263a; color: #e8eaf6; border: 1px solid #2e3348; border-radius: 8px;
+      font: 600 12px 'Segoe UI', sans-serif; padding: 5px 12px; cursor: pointer;
+    }
+    #dica button:hover { border-color: #6c63ff; }
+  </style>
+</head>
+<body>
+  <canvas id="tela"></canvas>
+  <div id="dica">
+    <span>Clique na cor que você quer. <b>Esc</b> ou botão direito cancela.</span>
+    <button id="cancelar" type="button">Cancelar</button>
+  </div>
+  <div id="lupa">
+    <canvas id="zoom" width="11" height="11"></canvas>
+    <div id="info"><span id="amostra"></span><span id="hex">#000000</span></div>
+  </div>
+  <script src="picker.js"></script>
+</body>
+</html>

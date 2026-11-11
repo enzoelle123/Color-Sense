@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   updatePatternRule:(id, data)   => ipcRenderer.invoke('scenes:update-rule', id, data),
   deletePatternRule:(id)         => ipcRenderer.invoke('scenes:delete-rule', id),
   activateScene:    (id, filterType, rules) => ipcRenderer.invoke('scenes:activate', id, filterType, rules),
+  deactivateScene:  ()           => ipcRenderer.invoke('scenes:deactivate'),
+  pickScreenColor:  ()           => ipcRenderer.invoke('picker:open'),
 
   // Criador (simulação de daltonismo)
   getSimState:   ()        => ipcRenderer.invoke('sim:get-state'),
