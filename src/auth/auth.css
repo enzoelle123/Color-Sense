@@ -113,3 +113,22 @@ select option { background: var(--surface); }
 
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Esqueci a senha ───────────────────────────────────────────────────────── */
+
+.btn-link {
+  background: none; border: none; padding: 2px 0;
+  color: var(--text-muted); font-size: 12px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; align-self: center;
+}
+.btn-link:hover, .btn-link:focus-visible { color: var(--text); }
+
+.hint { font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+.form-inner { display: flex; flex-direction: column; gap: 12px; }
+.link-row { display: flex; justify-content: space-between; gap: 8px; }
+.link-row .btn-link:only-child, .link-row .btn-link[hidden] + .btn-link { margin-left: auto; }
+.tabs[hidden] { display: none; }
+
+/* A etapa do código tem mais campos que a janela fixa comporta em telas com
+   escala alta: rola em vez de cortar o botão. */
+body { overflow-y: auto; align-items: safe center; padding-block: 16px; }

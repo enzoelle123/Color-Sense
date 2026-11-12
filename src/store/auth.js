@@ -44,6 +44,27 @@ async function changePassword({ senhaAtual, novaSenha }) {
   if (error) throw error;
 }
 
+// Esqueci a senha: o Supabase manda um e-mail com um código de 6 dígitos
+// (modelo "Reset Password" com {{ .Token }}). Código em vez de link porque o
+// link abriria o navegador, e o navegador não tem como devolver a sessão para
+// um programa instalado no Windows.
+async function requestPasswordReset(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
+}
+
+// O código vira uma sessão de recuperação; com ela a senha nova é gravada e a
+// pessoa já fica dentro do app.
+async function resetPasswordWithCode({ email, codigo, novaSenha }) {
+  const { error: erroCodigo } = await supabase.auth.verifyOtp({
+    email, token: codigo, type: 'recovery'
+  });
+  if (erroCodigo) throw erroCodigo;
+
+  const { error } = await supabase.auth.updateUser({ password: novaSenha });
+  if (error) throw error;
+}
+
 // Devolve também se a falha foi de rede: sem isso, "não tem sessão" e "o
 // servidor está fora do ar" chegavam iguais (null) e o app pedia senha a quem
 // nunca ia conseguir entrar.
@@ -92,4 +113,7 @@ async function getUser() {
   return criado;
 }
 
-module.exports = { signUp, signIn, signOut, changePassword, getSession, getUser };
+module.exports = {
+  signUp, signIn, signOut, changePassword, requestPasswordReset, resetPasswordWithCode,
+  getSession, getUser
+};

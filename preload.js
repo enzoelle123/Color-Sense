@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('colorSenseAPI', {
   signIn:     (data)  => ipcRenderer.invoke('auth:sign-in', data),
   signOut:    ()      => ipcRenderer.invoke('auth:sign-out'),
   changePassword: (data) => ipcRenderer.invoke('auth:change-password', data),
+  requestPasswordReset:  (email) => ipcRenderer.invoke('auth:request-reset', email),
+  resetPasswordWithCode: (data)  => ipcRenderer.invoke('auth:reset-with-code', data),
   getSession: ()      => ipcRenderer.invoke('auth:get-session'),
   getUser:    ()      => ipcRenderer.invoke('auth:get-user'),
 
